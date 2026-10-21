@@ -352,7 +352,7 @@ a.btn{color:var(--text)}a.btn.pri{color:var(--on-primary)}
 .chip.var-chip:not(:has(img)){padding-left:14px}
 
 
-/* shop brand colour (Atur > Brand) replaces the jade accent; mixes keep it readable in both themes */
+/* shop brand colour (POS Settings > Brand) replaces the jade accent; mixes keep it readable in both themes */
 :root.branded{--hue:var(--brand);--hue-soft:color-mix(in srgb,var(--brand) 13%,#fff);--hue-ink:color-mix(in srgb,var(--brand) 55%,#000)}
 @media (prefers-color-scheme:dark){:root.branded:not([data-theme="light"]){--hue:color-mix(in srgb,var(--brand) 55%,#fff);--hue-soft:color-mix(in srgb,var(--brand) 22%,#0c0d0c);--hue-ink:color-mix(in srgb,var(--brand) 30%,#fff)}}
 :root.branded[data-theme="dark"]{--hue:color-mix(in srgb,var(--brand) 55%,#fff);--hue-soft:color-mix(in srgb,var(--brand) 22%,#0c0d0c);--hue-ink:color-mix(in srgb,var(--brand) 30%,#fff)}

@@ -1,4 +1,4 @@
-// Shop branding shared by the owner and reseller apps: logo in the header, the brand colour as the accent.
+// Shop branding: logo in the header, the brand colour as the accent (same as the Modern POS apps).
 const HEX=/^#[0-9a-f]{6}$/i;
 export const BRAND_COLORS=['#0f6e5c','#1f4fd1','#7a3fd1','#c2185b','#d1452b','#b7791f','#2f7a45','#191c1a'];
 export const normBrand=b=>({logo:'',color:'',address:'',phone:'',instagram:'',website:'',footer:'',...(b&&typeof b==='object'?b:{})});
