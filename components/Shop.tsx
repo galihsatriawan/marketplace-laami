@@ -24,20 +24,5 @@ export async function Shop({ slug, result }: { slug?: string; result?: StoreResu
       </main>
     );
   }
-  return (
-    <>
-      <header className="top" id="top">
-        <span id="brand-mark" className="brand-mark"><Mark /></span>
-        <div className="brand"><span id="brand-name">{r.data.shop}</span><small id="shop-sub">Toko online</small></div>
-        <div className="sp" />
-        <button type="button" className="icon-btn cart-btn" data-act="cart" aria-label="Keranjang" id="cart-btn">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 10.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 7H6.2" /><circle cx="9" cy="19.5" r="1.3" /><circle cx="17" cy="19.5" r="1.3" /></svg>
-        </button>
-      </header>
-      <main className="wrap" id="main" aria-live="polite" />
-      <div id="sheet-root" />
-      <div id="toast-root" />
-      <Storefront data={r.data} api={posUrl()} />
-    </>
-  );
+  return <Storefront data={r.data} api={posUrl()} />;
 }

@@ -48,6 +48,6 @@ STORE_ORIGINS=http://localhost:3300 STORE_URL=http://localhost:3300 npm run dev
 ## Struktur
 
 - `app/` halaman (server component mengambil katalog dari POS, judul halaman = nama toko).
-- `client/store.js` aplikasi toko di browser (katalog, keranjang, checkout), gaya kode sama dengan aplikasi POS.
-- `client/brand.js` logo dan warna brand (sama dengan POS).
+- `components/Storefront.tsx` aplikasi toko di browser (React): header, katalog, keranjang, checkout; tampilan per bagian ada di `components/store/`.
+- `lib/store.ts` harga grosir, format rupiah, simpanan keranjang/data pembeli di browser, warna brand (sama dengan POS).
 - `app/globals.css` token warna dan komponen yang disalin dari POS supaya tampilannya sama.
