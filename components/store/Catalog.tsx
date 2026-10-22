@@ -54,12 +54,6 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
         ) : null}
       </section>
 
-      <ul className="perks">
-        <li><i><Chat /></i><div><b>Pesan via WhatsApp</b><span>Langsung ke penjual</span></div></li>
-        <li><i><Bag /></i><div><b>Ambil atau dikirim</b><span>Pilih saat checkout</span></div></li>
-        <li><i><Tag /></i><div><b>Harga grosir</b><span>Makin banyak makin murah</span></div></li>
-      </ul>
-
       <section className="toolbar" aria-label="Produk">
         <div className="bar-row" style={{ width: "100%" }}>
           <h2>{s ? `Hasil “${query.trim()}”` : "Semua produk"}<span className="count">{list.length} produk</span></h2>
@@ -122,10 +116,10 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
       <footer className="shop-foot">
         <div>
           <h3>Cara belanja</h3>
-          <ol>
-            <li>Pilih baju, variasi dan ukuran, lalu masukkan keranjang.</li>
-            <li>Isi nama dan nomor WhatsApp, pilih diambil di toko atau dikirim.</li>
-            <li>Tekan “Pesan lewat WhatsApp”, pesan sudah terisi, tinggal kirim.</li>
+          <ol className="steps">
+            <li><i><Tag /></i><div><b>Pilih baju</b>Variasi dan ukuran, lalu masukkan keranjang. Beli banyak dapat harga grosir.</div></li>
+            <li><i><Bag /></i><div><b>Ambil atau dikirim</b>Isi nama dan nomor WhatsApp, pilih diambil di toko atau dikirim.</div></li>
+            <li><i><Chat /></i><div><b>Pesan lewat WhatsApp</b>Pesan sudah terisi, tinggal tekan kirim ke penjual.</div></li>
           </ol>
         </div>
         <div>
