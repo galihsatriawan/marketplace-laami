@@ -1,7 +1,7 @@
 "use client";
 
 // Public storefront: catalog -> cart -> checkout. The order goes to the POS (re-priced and checked there) and the
-// buyer sends the composed message to the shop's WhatsApp. Same look and behaviour as the Modern POS apps.
+// buyer sends the composed message to the shop's WhatsApp. Laid out like a modern marketplace: search in the header, grid catalog, dialog product page.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { StoreData } from "@/lib/pos";
 import {
@@ -187,7 +187,7 @@ export function Storefront({ data: initial, api }: { data: StoreData; api: strin
 
   let content: ReactNode = null;
   if (!ready) content = null;
-  else if (closed) content = <section className="panel"><div className="empty"><b>Toko sedang tutup.</b> Coba lagi nanti.</div></section>;
+  else if (closed) content = <div className="empty"><b>Toko sedang tutup.</b> Coba lagi nanti.</div>;
   else if (view === "keranjang") {
     content = (
       <Cart data={data} cart={cart} buyer={buyer} busy={busy} onGo={(v) => { closeSheet(); go(v); }} onClear={() => saveCart([])}
@@ -200,15 +200,14 @@ export function Storefront({ data: initial, api }: { data: StoreData; api: strin
     const save = cartBase(data, cart) - cartTotal(data, cart);
     content = (
       <>
-        <Catalog data={data} query={query} onQuery={setQuery} onProduct={openProduct} />
+        <Catalog data={data} query={query} onProduct={openProduct} onClearQuery={() => setQuery("")} />
         {cart.length ? (
           <div className="cartbar">
             <div>
-              <div style={{ fontWeight: 600 }}>{pcs} pcs · {rp(cartTotal(data, cart))}</div>
+              <div style={{ fontWeight: 700 }}>{pcs} pcs · {rp(cartTotal(data, cart))}</div>
               <div className="small" style={{ opacity: 0.75 }}>{save > 0 ? `hemat ${rp(save)} harga grosir` : "belum termasuk ongkir"}</div>
             </div>
-            <button className="btn" data-act="go" data-id="keranjang" style={{ background: "var(--surface)", color: "var(--text)", borderColor: "var(--surface)" }}
-              onClick={() => { closeSheet(); go("keranjang"); }}>Lihat keranjang</button>
+            <button className="btn" data-act="go" data-id="keranjang" onClick={() => { closeSheet(); go("keranjang"); }}>Lihat keranjang</button>
           </div>
         ) : null}
       </>
@@ -221,16 +220,28 @@ export function Storefront({ data: initial, api }: { data: StoreData; api: strin
   return (
     <>
       <header className="top" id="top">
-        <span id="brand-mark" className="brand-mark">{brand.logo ? <img className="mark logo" src={encodeURI(brand.logo)} alt="" /> : <Mark />}</span>
-        <div className="brand"><span id="brand-name">{data.shop || "Modern POS"}</span><small id="shop-sub">Toko online</small></div>
-        <div className="sp" />
-        <button type="button" className="icon-btn cart-btn" data-act="cart" aria-label="Keranjang" id="cart-btn"
-          onClick={() => { closeSheet(); go(view === "keranjang" ? "katalog" : "keranjang"); }}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 10.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 7H6.2" /><circle cx="9" cy="19.5" r="1.3" /><circle cx="17" cy="19.5" r="1.3" /></svg>
-          {pcs ? <span className="badge">{pcs}</span> : null}
-        </button>
+        <div className="top-in">
+          <button type="button" className="brand-link" aria-label="Beranda toko" onClick={() => { closeSheet(); go("katalog"); }}>
+            <span id="brand-mark" className="brand-mark">{brand.logo ? <img className="mark logo" src={encodeURI(brand.logo)} alt="" /> : <Mark />}</span>
+            <span className="brand"><span id="brand-name">{data.shop || "Modern POS"}</span><small id="shop-sub">Toko online</small></span>
+          </button>
+          <label className="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></svg>
+            <span className="sr">Cari baju</span>
+            <input type="search" id="cat-q" data-input="q" placeholder={`Cari di ${data.shop || "toko"}`} value={query} enterKeyHint="search"
+              onChange={(e) => { setQuery(e.target.value); if (view !== "katalog" && view !== "selesai") go("katalog"); }} />
+          </label>
+          <div className="top-actions">
+            <button type="button" className="icon-btn cart-btn wide" data-act="cart" aria-label="Keranjang" id="cart-btn"
+              onClick={() => { closeSheet(); go(view === "keranjang" ? "katalog" : "keranjang"); }}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 10.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 7H6.2" /><circle cx="9" cy="19.5" r="1.3" /><circle cx="17" cy="19.5" r="1.3" /></svg>
+              <span className="cart-label">Keranjang</span>
+              {pcs ? <span className="badge">{pcs}</span> : null}
+            </button>
+          </div>
+        </div>
       </header>
-      <main key={nav} className={ready ? "wrap enter" : "wrap"} id="main" aria-live="polite">{content}</main>
+      <main key={nav} className={[ready ? "wrap enter" : "wrap", view === "katalog" && cart.length ? "has-bar" : ""].join(" ").trim()} id="main" aria-live="polite">{content}</main>
       <div id="sheet-root">
         {sheet && shown ? (
           <ProductSheet key={sheet.key} state={shown} closing={sheet.closing} onClose={closeSheet}
