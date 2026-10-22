@@ -17,6 +17,10 @@ export interface DoneOrder { code: string; waUrl: string; total: number; pcs: nu
 export interface SheetPick { productId: string; variantId: string; size?: string; qty: number }
 
 export const cartKey = (slug: string) => `toko.cart.${slug}`;
+/** The reseller whose link the buyer last opened, kept REF_DAYS so a later visit still counts for them. */
+export const refKey = (slug: string) => `toko.ref.${slug}`;
+export const REF_DAYS = 30;
+export interface Ref { code: string; name: string; at: number }
 export const doneKey = (slug: string) => `toko.done.${slug}`;
 export const BUYER_KEY = "toko.buyer";
 
@@ -62,6 +66,8 @@ export function applyBrandColor(color: string) {
 
 /* catalog */
 export const findProduct = (d: StoreData, id: string) => d.products.find((p) => p.id === id);
+/** Path of a product page under the store's home path (which may carry a reseller's /r/<code>). */
+export const productPath = (home: string, p: Product) => `${home}/p/${p.slug || p.id}`;
 export const variantOf = (p: Product | undefined, vid?: string | null): Variant | undefined =>
   p ? (vid ? p.variants.find((v) => v.id === vid) : p.variants[0]) : undefined;
 export const hasVariants = (p: Product) => p.variants.length > 1 || !!p.variants[0]?.name;
