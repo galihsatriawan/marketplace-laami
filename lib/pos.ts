@@ -19,9 +19,13 @@ export async function getStore(slug: string): Promise<StoreResult> {
   if (!posUrl()) return { ok: false, status: 503 };
   try {
     const r = await fetch(`${posUrl()}/api/public/stores/${s}`, { cache: "no-store", headers: { accept: "application/json" } });
-    if (!r.ok) return { ok: false, status: r.status === 404 ? 404 : 503 };
+    if (!r.ok) {
+      if (r.status !== 404) console.error("POS answered", r.status, `${posUrl()}/api/public/stores/${s}`);
+      return { ok: false, status: r.status === 404 ? 404 : 503 };
+    }
     return { ok: true, data: (await r.json()) as StoreData };
-  } catch {
+  } catch (e) {
+    console.error("POS unreachable", posUrl(), e);
     return { ok: false, status: 503 };
   }
 }
