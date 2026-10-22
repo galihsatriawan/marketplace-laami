@@ -7,9 +7,11 @@ export interface StoreData {
   slug: string; shop: string; intro: string; whatsapp: string;
   brand: { logo: string; color: string; address: string; instagram: string; website: string };
   sizes: string[];
+  /** Categories in use, sorted; older POS versions send none. */
+  categories?: string[];
   /** A reseller's link (?ref=code) the POS recognised: whose link the buyer opened. */
   ref?: { code: string; name: string } | null;
-  products: { id: string; slug?: string; name: string; price: number; tiers: { min: number; price: number }[];
+  products: { id: string; slug?: string; name: string; category?: string; price: number; tiers: { min: number; price: number }[];
     variants: { id: string; name: string; media: { url: string; type: "image" | "video" }[]; stock: Record<string, number> }[] }[];
 }
 export type StoreResult = { ok: true; data: StoreData } | { ok: false; status: number };

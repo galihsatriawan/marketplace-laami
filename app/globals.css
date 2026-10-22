@@ -136,6 +136,15 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .fchip{flex:none;height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--control);background:var(--surface);cursor:pointer;font-weight:600;font-size:14px;transition:background .2s var(--ease),color .2s,border-color .2s}
 .fchip:hover{border-color:var(--text)}
 .fchip[aria-pressed="true"]{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
+/* category tabs: underlined text tabs, so they read as sections rather than filter chips */
+.cats{display:flex;gap:22px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--border);margin:0 calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter));padding:0 var(--gutter-r) 0 var(--gutter);width:calc(100% + var(--gutter) + var(--gutter-r))}
+.cats::-webkit-scrollbar{display:none}
+.cat-tab{flex:none;position:relative;background:none;border:0;padding:12px 0 11px;font:inherit;font-weight:600;font-size:15px;color:var(--muted);cursor:pointer;transition:color .2s var(--ease)}
+.cat-tab:hover{color:var(--text)}
+.cat-tab[aria-pressed="true"]{color:var(--text)}
+.cat-tab[aria-pressed="true"]::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--hue)}
+@media (min-width:768px){.cats{margin:0;padding:0;width:auto}}
+.cat-kind{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)}
 .sort{height:36px;border-radius:999px;border:1px solid var(--control);background:var(--surface);padding:0 34px 0 14px;font-weight:600;font-size:14px;cursor:pointer;appearance:none;
   background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 18px) 16px,calc(100% - 13px) 16px;background-size:5px 5px;background-repeat:no-repeat}
 .bar-row{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}

@@ -6,6 +6,7 @@ type Sort = "rec" | "low" | "high" | "name";
 /** via: name of the reseller whose link the buyer came through. */
 type Props = { data: StoreData; query: string; via?: string; onProduct: (id: string) => void; onClearQuery: () => void };
 
+const OTHER = "\u0000other";
 const SORTS: [Sort, string][] = [["rec", "Rekomendasi"], ["low", "Harga terendah"], ["high", "Harga tertinggi"], ["name", "Nama A–Z"]];
 const stockOf = (p: Product) => p.variants.reduce((a, v) => a + Object.values(v.stock).reduce((b, n) => b + num(n), 0), 0);
 const sizesOf = (d: StoreData, p: Product) =>
@@ -14,14 +15,19 @@ const sizesOf = (d: StoreData, p: Product) =>
 export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
   const [filter, setFilter] = useState<string>("all"); // "all", "tier" or a size
   const [sort, setSort] = useState<Sort>("rec");
+  const [cat, setCat] = useState<string>(""); // "" = all, OTHER = products without a category
   const brand = normBrand(data.brand);
   const s = query.trim().toLowerCase();
 
   // Size filters only list sizes some product still has.
   const sizes = (data.sizes || []).filter((z) => data.products.some((p) => sizesOf(data, p).includes(z)));
   const anyTier = data.products.some((p) => tiersOf(p).length);
+  const cats = data.categories?.length ? data.categories : [...new Set(data.products.map((p) => p.category || "").filter(Boolean))].sort((a, b) => a.localeCompare(b, "id"));
+  const anyOther = cats.length > 0 && data.products.some((p) => !p.category);
+  const inCat = (p: Product) => !cat || (cat === OTHER ? !p.category : p.category === cat);
   const list = data.products
-    .filter((p) => !s || p.name.toLowerCase().includes(s))
+    .filter(inCat)
+    .filter((p) => !s || `${p.name} ${p.category || ""}`.toLowerCase().includes(s))
     .filter((p) => filter === "all" || (filter === "tier" ? tiersOf(p).length > 0 : sizesOf(data, p).includes(filter)));
   if (sort === "low") list.sort((a, b) => a.price - b.price);
   else if (sort === "high") list.sort((a, b) => b.price - a.price);
@@ -54,9 +60,17 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
         ) : null}
       </section>
 
+      {cats.length ? (
+        <nav className="cats" aria-label="Kategori">
+          <button type="button" className="cat-tab" data-act="cat" data-id="" aria-pressed={!cat} onClick={() => setCat("")}>Semua</button>
+          {cats.map((k) => <button type="button" key={k} className="cat-tab" data-act="cat" data-id={k} aria-pressed={cat === k} onClick={() => setCat(k)}>{k}</button>)}
+          {anyOther ? <button type="button" className="cat-tab" data-act="cat" data-id="other" aria-pressed={cat === OTHER} onClick={() => setCat(OTHER)}>Lainnya</button> : null}
+        </nav>
+      ) : null}
+
       <section className="toolbar" aria-label="Produk">
         <div className="bar-row" style={{ width: "100%" }}>
-          <h2>{s ? `Hasil “${query.trim()}”` : "Semua produk"}<span className="count">{list.length} produk</span></h2>
+          <h2>{s ? `Hasil “${query.trim()}”` : cat ? (cat === OTHER ? "Lainnya" : cat) : "Semua produk"}<span className="count">{list.length} produk</span></h2>
           <select className="sort" value={sort} aria-label="Urutkan" onChange={(e) => setSort(e.target.value as Sort)}>
             {SORTS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
           </select>
@@ -89,6 +103,7 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
                   </div>
                 </div>
                 <div className="cat-body">
+                  {p.category ? <div className="cat-kind">{p.category}</div> : null}
                   <div className="cat-name">{p.name}</div>
                   <div className="cat-price money">{rp(p.price)}</div>
                   {hint ? <span className="tier-hint">{hint}</span> : null}
@@ -108,7 +123,7 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
       ) : (
         <div className="empty">
           {data.products.length
-            ? <><b>Tidak ada yang cocok.</b>{s ? <button className="link" onClick={onClearQuery}>Hapus pencarian</button> : null}{filter !== "all" ? <> <button className="link" onClick={() => setFilter("all")}>Lihat semua produk</button></> : null}</>
+            ? <><b>Tidak ada yang cocok.</b>{s ? <button className="link" onClick={onClearQuery}>Hapus pencarian</button> : null}{filter !== "all" || cat ? <> <button className="link" onClick={() => { setFilter("all"); setCat(""); }}>Lihat semua produk</button></> : null}</>
             : <><b>Belum ada baju yang tersedia.</b> Cek lagi nanti.</>}
         </div>
       )}
