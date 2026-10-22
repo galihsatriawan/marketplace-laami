@@ -7,10 +7,10 @@ type State = NonNullable<ReturnType<typeof sheetState>>;
 type Props = {
   state: State; closing: boolean; onClose: () => void;
   onVariant: (id: string) => void; onSize: (size: string) => void; onQty: (qty: number) => void;
-  onView: (index: number) => void; onAdd: () => void;
+  onView: (index: number) => void; onAdd: () => void; onShare: () => void;
 };
 
-export function ProductSheet({ state, closing, onClose, onVariant, onSize, onQty, onView, onAdd }: Props) {
+export function ProductSheet({ state, closing, onClose, onVariant, onSize, onQty, onView, onAdd, onShare }: Props) {
   const { p, v, sizes, size, have, inCart, max, qty, price, media } = state;
   const tiers = tiersOf(p);
   const gallery = useRef<HTMLDivElement>(null);
@@ -65,6 +65,9 @@ export function ProductSheet({ state, closing, onClose, onVariant, onSize, onQty
             <span className="sum money"><MoneyBig value={price} /></span>
             {price < p.price ? <span className="was">{rp(p.price)}</span> : null}
             <span className="small muted">/pcs</span>
+            <button type="button" className="btn sm ghost share-btn" data-act="share" onClick={onShare}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5" /><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="19" r="2.5" /><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4" /></svg>Bagikan
+            </button>
           </div>
           {tiers.length ? (
             <div className="tiers-box">

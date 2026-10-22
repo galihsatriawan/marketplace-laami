@@ -3,14 +3,15 @@ import type { StoreData } from "@/lib/pos";
 import { cover, hasVariants, normBrand, num, rp, sizeEntries, tierHint, tiersOf, variantCover, type Product } from "@/lib/store";
 
 type Sort = "rec" | "low" | "high" | "name";
-type Props = { data: StoreData; query: string; onProduct: (id: string) => void; onClearQuery: () => void };
+/** via: name of the reseller whose link the buyer came through. */
+type Props = { data: StoreData; query: string; via?: string; onProduct: (id: string) => void; onClearQuery: () => void };
 
 const SORTS: [Sort, string][] = [["rec", "Rekomendasi"], ["low", "Harga terendah"], ["high", "Harga tertinggi"], ["name", "Nama A–Z"]];
 const stockOf = (p: Product) => p.variants.reduce((a, v) => a + Object.values(v.stock).reduce((b, n) => b + num(n), 0), 0);
 const sizesOf = (d: StoreData, p: Product) =>
   [...new Set(p.variants.flatMap((v) => sizeEntries(d, v.stock).filter(([, n]) => num(n) > 0).map(([k]) => k)))];
 
-export function Catalog({ data, query, onProduct, onClearQuery }: Props) {
+export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
   const [filter, setFilter] = useState<string>("all"); // "all", "tier" or a size
   const [sort, setSort] = useState<Sort>("rec");
   const brand = normBrand(data.brand);
@@ -38,6 +39,7 @@ export function Catalog({ data, query, onProduct, onClearQuery }: Props) {
           <h1>{data.shop}</h1>
           {data.intro ? <p>{data.intro}</p> : <p>Pilih baju, masukkan keranjang, lalu kirim pesanan lewat WhatsApp.</p>}
           <div className="hero-meta">
+            {via ? <span id="via-ref"><Chat />Dibantu {via}</span> : null}
             {brand.address ? <span><Pin />{brand.address}</span> : null}
             {brand.instagram ? <a href={`https://instagram.com/${brand.instagram.replace(/^@/, "")}`} target="_blank" rel="noopener noreferrer"><Cam />{brand.instagram}</a> : null}
             {wa ? <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer"><Chat />WhatsApp</a> : null}

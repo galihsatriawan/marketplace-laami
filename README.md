@@ -44,6 +44,8 @@ STORE_ORIGINS=http://localhost:3300 STORE_URL=http://localhost:3300 npm run dev
 
 - `/` → toko `DEFAULT_STORE`
 - `/<slug>` → toko dengan link itu; 404 ramah kalau toko tidak ada atau sedang dimatikan.
+- `/p/<produk>` dan `/<slug>/p/<produk>` → halaman satu produk (detail langsung terbuka), dengan judul, foto dan harga untuk preview di WhatsApp/IG.
+- `/r/<kode>` dan `/<slug>/r/<kode>` (juga `.../r/<kode>/p/<produk>`) → toko lewat link reseller. Kode diingat 30 hari di browser pembeli; pesanannya tercatat atas nama reseller itu di POS.
 
 ## Struktur
 

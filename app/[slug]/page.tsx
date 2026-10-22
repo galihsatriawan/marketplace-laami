@@ -1,10 +1,7 @@
-import { Shop, storeMetadata } from "@/components/Shop";
-import { getStore } from "@/lib/pos";
+import { ShopPage, shopMetadata } from "@/components/Shop";
 
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ slug: string }> };
-export async function generateMetadata({ params }: Props) { return storeMetadata(await getStore((await params).slug)); }
-export default async function StorePage({ params }: Props) {
-  return <Shop result={await getStore((await params).slug)} />;
-}
+export async function generateMetadata({ params }: Props) { return shopMetadata(await params); }
+export default async function StorePage({ params }: Props) { return <ShopPage route={await params} />; }

@@ -5,9 +5,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { StoreData } from "@/lib/pos";
 import {
-  applyBrandColor, cartBase, cartKey, cartPcs, cartTotal, clampCart, doneKey, findProduct, loadBuyer, local, mediaOf,
+  applyBrandColor, cartBase, cartKey, productPath, REF_DAYS, refKey, cartPcs, cartTotal, clampCart, doneKey, findProduct, loadBuyer, local, mediaOf,
   normBrand, rp, saveBuyer, session, sheetState, uid, unitPrice, variantOf, variantStock,
-  type Buyer, type CartLine, type DoneOrder, type SheetPick, type View,
+  type Buyer, type CartLine, type DoneOrder, type Ref, type SheetPick, type View,
 } from "@/lib/store";
 import { Mark } from "./Mark";
 import { Cart, type Checkout } from "./store/Cart";
@@ -20,7 +20,15 @@ type SheetState = { pick: SheetPick; closing: boolean; key: number };
 type ViewerState = { productId: string; variantId?: string; start: number };
 type OrderReply = { code?: string; waUrl?: string; total?: number; pcs?: number; tier?: boolean; error?: string };
 
-export function Storefront({ data: initial, api }: { data: StoreData; api: string }) {
+type Props = {
+  data: StoreData; api: string;
+  /** Path the store lives under ("" for the home store, "/<slug>" otherwise). */
+  base: string;
+  /** Product to open first (from a /p/<product> link). */
+  initialProduct?: string;
+};
+
+export function Storefront({ data: initial, api, base, initialProduct }: Props) {
   const [data, setData] = useState(initial);
   const slug = initial.slug;
   // Browser storage is read after mount, so nothing below the header renders on the server.
@@ -36,6 +44,11 @@ export function Storefront({ data: initial, api }: { data: StoreData; api: strin
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const [viewer, setViewer] = useState<ViewerState | null>(null);
   const [toast, setToast] = useState<{ msg: string; key: number } | null>(null);
+  const [ref, setRef] = useState<Ref | null>(null);
+  // The store's home path; through a reseller's link it keeps their /r/<code> so shared links still count for them.
+  const home = `${base}${ref ? `/r/${ref.code}` : ""}`;
+  const homeRef = useRef(home);
+  homeRef.current = home;
   // One id per cart: sending again after a dropped connection is recognised instead of doubled.
   const orderId = useRef<string | null>(null);
   const sheetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -59,6 +72,7 @@ export function Storefront({ data: initial, api }: { data: StoreData; api: strin
   }, []);
 
   const closeSheet = useCallback(() => {
+    if (/\/p\/[^/]+$/.test(location.pathname)) history.replaceState(history.state, "", homeRef.current || "/");
     setSheet((s) => (s && !s.closing ? { ...s, closing: true } : s));
     clearTimeout(sheetTimer.current);
     sheetTimer.current = setTimeout(() => setSheet((s) => (s && s.closing ? null : s)), 220);
@@ -93,6 +107,16 @@ export function Storefront({ data: initial, api }: { data: StoreData; api: strin
     setBuyer(loadBuyer());
     const d = session.get<DoneOrder | null>(doneKey(slug), null);
     if (d) { setDone(d); setView("selesai"); }
+    // A reseller's link the POS recognised wins; otherwise the last one opened, if recent enough.
+    if (initial.ref) {
+      const r = { ...initial.ref, at: Date.now() };
+      local.set(refKey(slug), r);
+      setRef(r);
+    } else {
+      const r = local.get<Ref | null>(refKey(slug), null);
+      if (r && r.code && Date.now() - Number(r.at) < REF_DAYS * 86400_000) setRef(r);
+      else if (r) local.set(refKey(slug), null);
+    }
     setReady(true);
   }, [initial, slug]);
 
@@ -127,7 +151,26 @@ export function Storefront({ data: initial, api }: { data: StoreData; api: strin
     clearTimeout(sheetTimer.current);
     const v0 = p.variants.find((v) => variantStock(v) > 0) || p.variants[0];
     setSheet((s) => ({ pick: { productId: id, variantId: v0.id, qty: 1 }, closing: false, key: (s?.key ?? 0) + 1 }));
+    // The address bar shows the product's own link, so it can be copied or shared.
+    history.replaceState(history.state, "", productPath(homeRef.current, p));
   };
+  const shareProduct = async () => {
+    if (!shown) return;
+    const url = location.origin + productPath(home, shown.p);
+    const text = `${shown.p.name} · ${rp(shown.price)} di ${data.shop}`;
+    try {
+      if (navigator.share) { await navigator.share({ title: shown.p.name, text, url }); return; }
+    } catch (e) { if ((e as Error).name === "AbortError") return; }
+    try { await navigator.clipboard.writeText(url); showToast("Link produk disalin"); } catch { showToast(url); }
+  };
+
+  // A /p/<product> link opens that product once the page is ready.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!ready || opened.current || !initialProduct) return;
+    opened.current = true;
+    if (view === "katalog") openProduct(initialProduct);
+  });
   const pick = (patch: Partial<SheetPick>) => setSheet((s) => (s ? { ...s, pick: { ...s.pick, ...patch } } : s));
   const shown = sheet ? sheetState(data, cart, sheet.pick) : null;
 
@@ -158,7 +201,7 @@ export function Storefront({ data: initial, api }: { data: StoreData; api: strin
       res = await fetch(`${api}/api/public/stores/${slug}/orders`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: orderId.current, items: cart, name, phone, address: ship ? address : "", delivery: buyer.delivery, note: buyer.note || "" }),
+        body: JSON.stringify({ id: orderId.current, items: cart, name, phone, address: ship ? address : "", delivery: buyer.delivery, note: buyer.note || "", ...(ref ? { ref: ref.code } : {}) }),
       });
       reply = (await res.json().catch(() => ({}))) as OrderReply;
     } catch {
@@ -200,7 +243,7 @@ export function Storefront({ data: initial, api }: { data: StoreData; api: strin
     const save = cartBase(data, cart) - cartTotal(data, cart);
     content = (
       <>
-        <Catalog data={data} query={query} onProduct={openProduct} onClearQuery={() => setQuery("")} />
+        <Catalog data={data} query={query} via={ref?.name} onProduct={openProduct} onClearQuery={() => setQuery("")} />
         {cart.length ? (
           <div className="cartbar">
             <div>
@@ -249,7 +292,7 @@ export function Storefront({ data: initial, api }: { data: StoreData; api: strin
             onSize={(size) => pick({ size, qty: 1 })}
             onQty={(qty) => pick({ size: shown.size, qty })}
             onView={(i) => setViewer({ productId: shown.p.id, variantId: shown.v.id, start: i })}
-            onAdd={addToCart} />
+            onAdd={addToCart} onShare={() => void shareProduct()} />
         ) : null}
       </div>
       <div id="toast-root">{toast ? <div className="toast" role="status" key={toast.key}>{toast.msg}</div> : null}</div>
