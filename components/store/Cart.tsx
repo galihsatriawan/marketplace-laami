@@ -1,6 +1,6 @@
-import { useRef, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { flushSync } from "react-dom";
-import type { StoreData } from "@/lib/pos";
+import type { Quote, StoreData } from "@/lib/pos";
 import { tr } from "@/lib/i18n";
 import {
   cartBase, cartPcs, cartTotal, cover, findProduct, nextTier, normBrand, num, rp, unitPrice, variantCover, variantOf,
@@ -12,6 +12,8 @@ type Props = {
   data: StoreData; cart: CartLine[]; buyer: Buyer; busy: boolean;
   onGo: (v: View) => void; onQty: (index: number, qty: number) => void; onClear: () => void;
   onBuyer: (patch: Partial<Buyer>) => void; onToast: (msg: string) => void; onPlace: (c: Checkout) => void;
+  /** Promo code applied ("" = none), the shop's quote for this cart (null while unknown), and setting the code. */
+  code: string; quote: Quote | null; onCode: (code: string) => void;
 };
 
 const Back = ({ onGo }: { onGo: (v: View) => void }) => (
@@ -20,7 +22,8 @@ const Back = ({ onGo }: { onGo: (v: View) => void }) => (
   </button>
 );
 
-export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, onToast, onPlace }: Props) {
+export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, onToast, onPlace, code, quote, onCode }: Props) {
+  const [typed, setTyped] = useState(code);
   const nameRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const addrRef = useRef<HTMLTextAreaElement>(null);
@@ -39,6 +42,11 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
   const base = cartBase(data, cart);
   const save = base - total;
   const next = nextTier(data, cart);
+  // the shop's promo counts only while its quote is for these very prices
+  const fresh = !!quote && quote.subtotal === total;
+  const promo = fresh ? quote!.promo : null;
+  const pay = total - (promo?.amount || 0);
+  const applyCode = () => { const c = typed.trim().toUpperCase().replace(/[^A-Z0-9]/g, ""); setTyped(c); onCode(c); };
   const ship = buyer.delivery === "ship";
   const pickupAt = normBrand(data.brand).address;
 
@@ -128,11 +136,23 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
               <div className="f"><label htmlFor="co-note">{tr("Catatan")} <span className="muted" style={{ fontWeight: 400 }}>{tr("(opsional)")}</span></label>
                 <input className="in" id="co-note" name="note" value={buyer.note} onChange={(e) => onBuyer({ note: e.target.value })}
                   maxLength={300} placeholder={tr("Contoh: tolong dibungkus kado")} /></div>
+              <div className="f"><label htmlFor="co-code">{tr("Kode promo")} <span className="muted" style={{ fontWeight: 400 }}>{tr("(opsional)")}</span></label>
+                <div className="promo-row">
+                  <input className="in" id="co-code" value={typed} maxLength={20} autoComplete="off" autoCapitalize="characters" placeholder={tr("Contoh: HEMAT20")}
+                    onChange={(e) => setTyped(e.target.value.toUpperCase())} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyCode(); } }} />
+                  {code && typed === code
+                    ? <button type="button" className="btn ghost" data-act="code-clear" onClick={() => { setTyped(""); onCode(""); }}>{tr("Hapus")}</button>
+                    : <button type="button" className="btn" data-act="code-apply" disabled={!typed.trim()} onClick={applyCode}>{tr("Pakai")}</button>}
+                </div>
+                {code && fresh && quote!.error ? <span className="promo-msg bad" id="co-code-msg">{quote!.errorTpl ? tr(quote!.errorTpl, quote!.errorVars) : quote!.error}</span>
+                  : code && promo ? <span className="promo-msg ok" id="co-code-msg">{tr("Kode {code} dipakai.", { code })}</span> : null}
+              </div>
               <div className="calc">
                 <div className="ln"><span className="k">{tr("Subtotal {pcs} pcs", { pcs })}</span><span className="money">{rp(base)}</span></div>
                 {save > 0 ? <div className="ln"><span className="k">{tr("Hemat harga grosir")}</span><span className="money" style={{ color: "var(--hue)" }}>−{rp(save)}</span></div> : null}
+                {promo ? <div className="ln" id="co-promo"><span className="k">{tr("Promo {name}", { name: promo.name })}</span><span className="money" style={{ color: "var(--hue)" }}>−{rp(promo.amount)}</span></div> : null}
                 <div className="ln"><span className="k">{tr("Ongkir")}</span><span>{ship ? tr("dikabari toko") : tr("tidak ada")}</span></div>
-                <div className="ln tot"><span>{tr("Total")}</span><span className="money" id="co-total">{rp(total)}</span></div>
+                <div className="ln tot"><span>{tr("Total")}</span><span className="money" id="co-total">{rp(pay)}</span></div>
               </div>
               <button className="btn pri lg full" type="submit" disabled={busy}>{busy ? tr("Mengirim…") : tr("Pesan lewat WhatsApp")}</button>
               <div className="small muted">{tr("Pesananmu tercatat di {shop}, lalu WhatsApp terbuka dengan pesan yang sudah terisi. Tinggal tekan kirim.", { shop: data.shop })}</div>
