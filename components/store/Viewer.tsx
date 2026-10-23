@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Media } from "@/lib/store";
+import { tr } from "@/lib/i18n";
 
 type Props = { title: string; caption: string; price: string; media: Media[]; start: number; onClose: () => void };
 
@@ -35,7 +36,7 @@ export function Viewer({ title, caption, price, media, start, onClose }: Props) 
       </div>
       <div className="viewer-top">
         <span className="viewer-count" id="vcount">{index + 1} / {media.length}</span>
-        <button type="button" className="viewer-btn" data-act="viewer-close" aria-label="Tutup" onClick={onClose}>×</button>
+        <button type="button" className="viewer-btn" data-act="viewer-close" aria-label={tr("Tutup")} onClick={onClose}>×</button>
       </div>
       <div className="viewer-bottom"><div className="viewer-cap"><b>{caption}</b><span>{price}</span></div></div>
     </div>
