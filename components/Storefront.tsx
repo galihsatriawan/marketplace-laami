@@ -15,6 +15,8 @@ import { Catalog } from "./store/Catalog";
 import { Done } from "./store/Done";
 import { ProductSheet } from "./store/ProductSheet";
 import { Viewer } from "./store/Viewer";
+import { tr } from "@/lib/i18n";
+import { LangSwitch } from "@/lib/i18n/LangSwitch";
 
 type SheetState = { pick: SheetPick; closing: boolean; key: number };
 type ViewerState = { productId: string; variantId?: string; start: number };
@@ -58,6 +60,8 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   cartRef.current = cart;
   const buyerRef = useRef(buyer);
   buyerRef.current = buyer;
+  const refCode = useRef<string | null>(null);
+  refCode.current = ref?.code ?? null;
 
   const saveCart = useCallback((next: CartLine[]) => {
     orderId.current = null;
@@ -86,10 +90,18 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
 
   const refresh = useCallback(async () => {
     try {
-      const r = await fetch(`${api}/api/public/stores/${slug}`, { cache: "no-store" });
+      // keep the reseller's link: their held stock is part of what this buyer may order
+      const q = refCode.current ? `?ref=${encodeURIComponent(refCode.current)}` : "";
+      const r = await fetch(`${api}/api/public/stores/${slug}${q}`, { cache: "no-store" });
       if (r.status === 404) { setClosed(true); return; }
       if (!r.ok) return;
       const next = (await r.json()) as StoreData;
+      if (refCode.current && !next.ref) {
+        // the reseller was removed: stop crediting them
+        refCode.current = null;
+        local.set(refKey(slug), null);
+        setRef(null);
+      }
       const clamped = clampCart(next, cartRef.current);
       local.set(cartKey(slug), clamped);
       setData(next);
@@ -97,6 +109,8 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
       setClosed(false);
     } catch { /* offline: keep what is shown */ }
   }, [api, slug]);
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
 
   // Mount: restore the cart, the buyer details and a just-placed order.
   useEffect(() => {
@@ -112,10 +126,17 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
       const r = { ...initial.ref, at: Date.now() };
       local.set(refKey(slug), r);
       setRef(r);
+    } else if (/\/r\/[^/]+/.test(location.pathname)) {
+      // a reseller link the POS no longer knows (removed reseller): forget the old one too
+      local.set(refKey(slug), null);
     } else {
       const r = local.get<Ref | null>(refKey(slug), null);
-      if (r && r.code && Date.now() - Number(r.at) < REF_DAYS * 86400_000) setRef(r);
-      else if (r) local.set(refKey(slug), null);
+      if (r && r.code && Date.now() - Number(r.at) < REF_DAYS * 86400_000) {
+        setRef(r);
+        // the page was rendered without it: load the catalog through their link, which also checks it still works
+        refCode.current = r.code;
+        void refreshRef.current();
+      } else if (r) local.set(refKey(slug), null);
     }
     setReady(true);
   }, [initial, slug]);
@@ -157,11 +178,11 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   const shareProduct = async () => {
     if (!shown) return;
     const url = location.origin + productPath(home, shown.p);
-    const text = `${shown.p.name} · ${rp(shown.price)} di ${data.shop}`;
+    const text = tr("{name} · {price} di {shop}", { name: shown.p.name, price: rp(shown.price), shop: data.shop });
     try {
       if (navigator.share) { await navigator.share({ title: shown.p.name, text, url }); return; }
     } catch (e) { if ((e as Error).name === "AbortError") return; }
-    try { await navigator.clipboard.writeText(url); showToast("Link produk disalin"); } catch { showToast(url); }
+    try { await navigator.clipboard.writeText(url); showToast(tr("Link produk disalin")); } catch { showToast(url); }
   };
 
   // A /p/<product> link opens that product once the page is ready.
@@ -179,11 +200,13 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     const { p, v, size, qty } = shown;
     const at = cart.findIndex((c) => c.productId === p.id && c.variantId === v.id && c.size === size);
     saveCart(at >= 0 ? cart.map((c, i) => (i === at ? { ...c, qty: c.qty + qty } : c)) : [...cart, { productId: p.id, variantId: v.id, size, qty }]);
-    showToast(`${p.name}${v.name ? " " + v.name : ""} ${size} ×${qty} masuk keranjang`);
+    showToast(tr("{name}{v} {size} ×{qty} masuk keranjang", { name: p.name, v: v.name ? " " + v.name : "", size, qty }));
     closeSheet();
   };
 
   const updateBuyer = (patch: Partial<Buyer>) => {
+    // new details make a new order: a resend with the old id would get the old details back
+    if (Object.entries(patch).some(([k, v]) => buyerRef.current[k as keyof Buyer] !== v)) orderId.current = null;
     const next = { ...buyerRef.current, ...patch };
     buyerRef.current = next;
     setBuyer(next);
@@ -206,16 +229,18 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
       reply = (await res.json().catch(() => ({}))) as OrderReply;
     } catch {
       setBusy(false);
-      showToast("Tidak ada koneksi internet. Coba lagi.");
+      showToast(tr("Tidak ada koneksi internet. Coba lagi."));
       return;
     }
     setBusy(false);
     if (!res.ok) {
-      showToast(reply.error || "Pesanan gagal dikirim. Coba lagi.");
+      showToast(reply.error || tr("Pesanan gagal dikirim. Coba lagi."));
       if (res.status === 409) { orderId.current = null; await refresh(); }
       return;
     }
     const placed: DoneOrder = { code: reply.code ?? "", waUrl: reply.waUrl ?? "", total: reply.total ?? 0, pcs: reply.pcs ?? 0, tier: !!reply.tier };
+    // the shop priced it with its latest prices; say so when that differs from what the cart showed
+    if (reply.total !== undefined && reply.total !== cartTotal(data, cart)) showToast(tr("Harga sudah diperbarui toko. Total pesananmu {total}.", { total: rp(reply.total) }));
     setDone(placed);
     session.set(doneKey(slug), placed);
     saveCart([]);
@@ -230,7 +255,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
 
   let content: ReactNode = null;
   if (!ready) content = null;
-  else if (closed) content = <div className="empty"><b>Toko sedang tutup.</b> Coba lagi nanti.</div>;
+  else if (closed) content = <div className="empty"><b>{tr("Toko sedang tutup.")}</b> {tr("Coba lagi nanti.")}</div>;
   else if (view === "keranjang") {
     content = (
       <Cart data={data} cart={cart} buyer={buyer} busy={busy} onGo={(v) => { closeSheet(); go(v); }} onClear={() => saveCart([])}
@@ -247,10 +272,10 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
         {cart.length ? (
           <div className="cartbar">
             <div>
-              <div style={{ fontWeight: 700 }}>{pcs} pcs · {rp(cartTotal(data, cart))}</div>
-              <div className="small" style={{ opacity: 0.75 }}>{save > 0 ? `hemat ${rp(save)} harga grosir` : "belum termasuk ongkir"}</div>
+              <div style={{ fontWeight: 700 }}>{pcs} {tr("pcs ·")} {rp(cartTotal(data, cart))}</div>
+              <div className="small" style={{ opacity: 0.75 }}>{save > 0 ? tr("hemat {save} harga grosir", { save: rp(save) }) : tr("belum termasuk ongkir")}</div>
             </div>
-            <button className="btn" data-act="go" data-id="keranjang" onClick={() => { closeSheet(); go("keranjang"); }}>Lihat keranjang</button>
+            <button className="btn" data-act="go" data-id="keranjang" onClick={() => { closeSheet(); go("keranjang"); }}>{tr("Lihat keranjang")}</button>
           </div>
         ) : null}
       </>
@@ -264,21 +289,22 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     <>
       <header className="top" id="top">
         <div className="top-in">
-          <button type="button" className="brand-link" aria-label="Beranda toko" onClick={() => { closeSheet(); go("katalog"); }}>
+          <button type="button" className="brand-link" aria-label={tr("Beranda toko")} onClick={() => { closeSheet(); go("katalog"); }}>
             <span id="brand-mark" className="brand-mark">{brand.logo ? <img className="mark logo" src={encodeURI(brand.logo)} alt="" /> : <Mark />}</span>
-            <span className="brand"><span id="brand-name">{data.shop || "Modern POS"}</span><small id="shop-sub">Toko online</small></span>
+            <span className="brand"><span id="brand-name">{data.shop || "Modern POS"}</span><small id="shop-sub">{tr("Toko online")}</small></span>
           </button>
           <label className="search">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></svg>
-            <span className="sr">Cari baju</span>
-            <input type="search" id="cat-q" data-input="q" placeholder={`Cari di ${data.shop || "toko"}`} value={query} enterKeyHint="search"
+            <span className="sr">{tr("Cari baju")}</span>
+            <input type="search" id="cat-q" data-input="q" placeholder={tr("Cari di {v}", { v: data.shop || "toko" })} value={query} enterKeyHint="search"
               onChange={(e) => { setQuery(e.target.value); if (view !== "katalog" && view !== "selesai") go("katalog"); }} />
           </label>
           <div className="top-actions">
-            <button type="button" className="icon-btn cart-btn wide" data-act="cart" aria-label="Keranjang" id="cart-btn"
+            <LangSwitch compact />
+            <button type="button" className="icon-btn cart-btn wide" data-act="cart" aria-label={tr("Keranjang")} id="cart-btn"
               onClick={() => { closeSheet(); go(view === "keranjang" ? "katalog" : "keranjang"); }}>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 10.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 7H6.2" /><circle cx="9" cy="19.5" r="1.3" /><circle cx="17" cy="19.5" r="1.3" /></svg>
-              <span className="cart-label">Keranjang</span>
+              <span className="cart-label">{tr("Keranjang")}</span>
               {pcs ? <span className="badge">{pcs}</span> : null}
             </button>
           </div>

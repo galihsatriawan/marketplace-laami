@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import "./globals.css";
+import { isLang, LANG_COOKIE } from "@/lib/i18n";
+import { LangProvider } from "@/lib/i18n/LangProvider";
 
 export const metadata: Metadata = {
   title: "Toko online",
@@ -16,16 +19,18 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const c = (await cookies()).get(LANG_COOKIE)?.value;
+  const lang = isLang(c) ? c : "id";
   return (
-    <html lang="id">
+    <html lang={lang}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" />
       </head>
-      <body>{children}</body>
+      <body><LangProvider lang={lang}>{children}</LangProvider></body>
     </html>
   );
 }

@@ -377,3 +377,8 @@ textarea.in{height:auto;min-height:80px;padding:10px 12px;resize:vertical}
 :root.branded{--hue:var(--brand);--hue-soft:color-mix(in srgb,var(--brand) 13%,#fff);--hue-ink:color-mix(in srgb,var(--brand) 55%,#000)}
 @media (prefers-color-scheme:dark){:root.branded:not([data-theme="light"]){--hue:color-mix(in srgb,var(--brand) 55%,#fff);--hue-soft:color-mix(in srgb,var(--brand) 22%,#0c0d0c);--hue-ink:color-mix(in srgb,var(--brand) 30%,#fff)}}
 :root.branded[data-theme="dark"]{--hue:color-mix(in srgb,var(--brand) 55%,#fff);--hue-soft:color-mix(in srgb,var(--brand) 22%,#0c0d0c);--hue-ink:color-mix(in srgb,var(--brand) 30%,#fff)}
+
+/* ID / EN language picker in the header */
+.lang-switch{display:inline-flex;background:var(--surface);border:1px solid var(--control);border-radius:999px;padding:3px;gap:2px;flex:none}
+.lang-switch button{border:0;background:transparent;height:30px;padding:0 10px;border-radius:999px;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer}
+.lang-switch button[aria-pressed="true"]{background:var(--primary);color:var(--on-primary)}

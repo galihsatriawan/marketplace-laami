@@ -1,5 +1,6 @@
 // Storefront logic shared by the browser components: types, money formatting, wholesale pricing, storage.
 import type { StoreData } from "./pos";
+import { tr } from "@/lib/i18n";
 
 export type Product = StoreData["products"][number];
 export type Variant = Product["variants"][number];
@@ -84,7 +85,7 @@ export function cover(p: Product): string | undefined {
   return undefined;
 }
 export const mediaOf = (p: Product, v: Variant | undefined): Media[] => (v && v.media.length ? v.media : p.variants.flatMap((x) => x.media));
-export const tierHint = (p: Product) => { const t = tiersOf(p)[0]; return t ? `Beli ${t.min}+ ${rp(t.price)}/pcs` : ""; };
+export const tierHint = (p: Product) => { const t = tiersOf(p)[0]; return t ? tr("Beli {min}+ {price}/pcs", { min: t.min, price: rp(t.price) }) : ""; };
 
 /* wholesale: the highest tier whose min <= the TOTAL pcs in the cart (models may be mixed), per product */
 export const cartPcs = (cart: CartLine[]) => cart.reduce((a, c) => a + c.qty, 0);
