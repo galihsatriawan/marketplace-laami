@@ -61,7 +61,7 @@ export function ProductSheet({ state, closing, onClose, onVariant, onSize, onQty
           </div>
         ) : null}
         <div className="pd-info">
-          {p.category ? <div className="cat-kind">{p.category}</div> : null}
+          {p.category ? <div className="cat-kind">{p.subcategory ? `${p.category} · ${p.subcategory}` : p.category}</div> : null}
           <div className="pd-price">
             <span className="sum money"><MoneyBig value={price} /></span>
             {price < p.price ? <span className="was">{rp(p.price)}</span> : null}
