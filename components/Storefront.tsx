@@ -60,6 +60,8 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   cartRef.current = cart;
   const buyerRef = useRef(buyer);
   buyerRef.current = buyer;
+  const refCode = useRef<string | null>(null);
+  refCode.current = ref?.code ?? null;
 
   const saveCart = useCallback((next: CartLine[]) => {
     orderId.current = null;
@@ -88,10 +90,18 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
 
   const refresh = useCallback(async () => {
     try {
-      const r = await fetch(`${api}/api/public/stores/${slug}`, { cache: "no-store" });
+      // keep the reseller's link: their held stock is part of what this buyer may order
+      const q = refCode.current ? `?ref=${encodeURIComponent(refCode.current)}` : "";
+      const r = await fetch(`${api}/api/public/stores/${slug}${q}`, { cache: "no-store" });
       if (r.status === 404) { setClosed(true); return; }
       if (!r.ok) return;
       const next = (await r.json()) as StoreData;
+      if (refCode.current && !next.ref) {
+        // the reseller was removed: stop crediting them
+        refCode.current = null;
+        local.set(refKey(slug), null);
+        setRef(null);
+      }
       const clamped = clampCart(next, cartRef.current);
       local.set(cartKey(slug), clamped);
       setData(next);
@@ -99,6 +109,8 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
       setClosed(false);
     } catch { /* offline: keep what is shown */ }
   }, [api, slug]);
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
 
   // Mount: restore the cart, the buyer details and a just-placed order.
   useEffect(() => {
@@ -114,10 +126,17 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
       const r = { ...initial.ref, at: Date.now() };
       local.set(refKey(slug), r);
       setRef(r);
+    } else if (/\/r\/[^/]+/.test(location.pathname)) {
+      // a reseller link the POS no longer knows (removed reseller): forget the old one too
+      local.set(refKey(slug), null);
     } else {
       const r = local.get<Ref | null>(refKey(slug), null);
-      if (r && r.code && Date.now() - Number(r.at) < REF_DAYS * 86400_000) setRef(r);
-      else if (r) local.set(refKey(slug), null);
+      if (r && r.code && Date.now() - Number(r.at) < REF_DAYS * 86400_000) {
+        setRef(r);
+        // the page was rendered without it: load the catalog through their link, which also checks it still works
+        refCode.current = r.code;
+        void refreshRef.current();
+      } else if (r) local.set(refKey(slug), null);
     }
     setReady(true);
   }, [initial, slug]);
@@ -186,6 +205,8 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   };
 
   const updateBuyer = (patch: Partial<Buyer>) => {
+    // new details make a new order: a resend with the old id would get the old details back
+    if (Object.entries(patch).some(([k, v]) => buyerRef.current[k as keyof Buyer] !== v)) orderId.current = null;
     const next = { ...buyerRef.current, ...patch };
     buyerRef.current = next;
     setBuyer(next);
@@ -218,6 +239,8 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
       return;
     }
     const placed: DoneOrder = { code: reply.code ?? "", waUrl: reply.waUrl ?? "", total: reply.total ?? 0, pcs: reply.pcs ?? 0, tier: !!reply.tier };
+    // the shop priced it with its latest prices; say so when that differs from what the cart showed
+    if (reply.total !== undefined && reply.total !== cartTotal(data, cart)) showToast(tr("Harga sudah diperbarui toko. Total pesananmu {total}.", { total: rp(reply.total) }));
     setDone(placed);
     session.set(doneKey(slug), placed);
     saveCart([]);

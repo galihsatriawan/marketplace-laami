@@ -118,4 +118,6 @@ export const EN: Record<string, string> = {
   "Variasi": "Variant",
   "Variasi dan ukuran, lalu masukkan keranjang. Beli banyak dapat harga grosir.": "Choose variant and size, then add to cart. Buy more for wholesale prices.",
   "Video": "Video",
+
+  "Harga sudah diperbarui toko. Total pesananmu {total}.": "The shop has updated its prices. Your order total is {total}.",
 };
