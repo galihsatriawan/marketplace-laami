@@ -9,9 +9,11 @@ export interface StoreData {
   sizes: string[];
   /** Categories in use, sorted; older POS versions send none. */
   categories?: string[];
+  /** Sub-categories per category, e.g. { Gamis: ["Anak", "Syari"] }; older POS versions send none. */
+  subcategories?: Record<string, string[]>;
   /** A reseller's link (?ref=code) the POS recognised: whose link the buyer opened. */
   ref?: { code: string; name: string } | null;
-  products: { id: string; slug?: string; name: string; category?: string; price: number; tiers: { min: number; price: number }[];
+  products: { id: string; slug?: string; name: string; category?: string; subcategory?: string; price: number; tiers: { min: number; price: number }[];
     variants: { id: string; name: string; media: { url: string; type: "image" | "video" }[]; stock: Record<string, number> }[] }[];
 }
 export type StoreResult = { ok: true; data: StoreData } | { ok: false; status: number };

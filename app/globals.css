@@ -139,6 +139,7 @@ h1,h2,h3{margin:0;text-wrap:balance}
 /* category tabs: underlined text tabs, so they read as sections rather than filter chips */
 .cats{display:flex;gap:22px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--border);margin:0 calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter));padding:0 var(--gutter-r) 0 var(--gutter);width:calc(100% + var(--gutter) + var(--gutter-r))}
 .cats::-webkit-scrollbar{display:none}
+.subcats{margin-top:12px}.subcats .fchip{height:32px;font-size:13.5px}
 .cat-tab{flex:none;position:relative;background:none;border:0;padding:12px 0 11px;font:inherit;font-weight:600;font-size:15px;color:var(--muted);cursor:pointer;transition:color .2s var(--ease)}
 .cat-tab:hover{color:var(--text)}
 .cat-tab[aria-pressed="true"]{color:var(--text)}

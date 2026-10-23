@@ -15,7 +15,9 @@ const sizesOf = (d: StoreData, p: Product) =>
 export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
   const [filter, setFilter] = useState<string>("all"); // "all", "tier" or a size
   const [sort, setSort] = useState<Sort>("rec");
-  const [cat, setCat] = useState<string>(""); // "" = all, OTHER = products without a category
+  const [cat, setCatState] = useState<string>(""); // "" = all, OTHER = products without a category
+  const [sub, setSub] = useState<string>(""); // sub-category within cat, "" = all of cat
+  const setCat = (k: string) => { setCatState(k); setSub(""); };
   const brand = normBrand(data.brand);
   const s = query.trim().toLowerCase();
 
@@ -24,10 +26,11 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
   const anyTier = data.products.some((p) => tiersOf(p).length);
   const cats = data.categories?.length ? data.categories : [...new Set(data.products.map((p) => p.category || "").filter(Boolean))].sort((a, b) => a.localeCompare(b, "id"));
   const anyOther = cats.length > 0 && data.products.some((p) => !p.category);
-  const inCat = (p: Product) => !cat || (cat === OTHER ? !p.category : p.category === cat);
+  const subs = cat && cat !== OTHER ? data.subcategories?.[cat] || [] : [];
+  const inCat = (p: Product) => !cat || (cat === OTHER ? !p.category : p.category === cat && (!sub || p.subcategory === sub));
   const list = data.products
     .filter(inCat)
-    .filter((p) => !s || `${p.name} ${p.category || ""}`.toLowerCase().includes(s))
+    .filter((p) => !s || `${p.name} ${p.category || ""} ${p.subcategory || ""}`.toLowerCase().includes(s))
     .filter((p) => filter === "all" || (filter === "tier" ? tiersOf(p).length > 0 : sizesOf(data, p).includes(filter)));
   if (sort === "low") list.sort((a, b) => a.price - b.price);
   else if (sort === "high") list.sort((a, b) => b.price - a.price);
@@ -67,10 +70,16 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
           {anyOther ? <button type="button" className="cat-tab" data-act="cat" data-id="other" aria-pressed={cat === OTHER} onClick={() => setCat(OTHER)}>Lainnya</button> : null}
         </nav>
       ) : null}
+      {subs.length ? (
+        <div className="filters subcats" role="group" aria-label={`Jenis ${cat}`}>
+          <button type="button" className="fchip" data-act="sub" data-id="" aria-pressed={!sub} onClick={() => setSub("")}>Semua {cat}</button>
+          {subs.map((k) => <button type="button" key={k} className="fchip" data-act="sub" data-id={k} aria-pressed={sub === k} onClick={() => setSub(k)}>{k}</button>)}
+        </div>
+      ) : null}
 
       <section className="toolbar" aria-label="Produk">
         <div className="bar-row" style={{ width: "100%" }}>
-          <h2>{s ? `Hasil “${query.trim()}”` : cat ? (cat === OTHER ? "Lainnya" : cat) : "Semua produk"}<span className="count">{list.length} produk</span></h2>
+          <h2>{s ? `Hasil “${query.trim()}”` : cat ? (cat === OTHER ? "Lainnya" : sub ? `${cat} ${sub}` : cat) : "Semua produk"}<span className="count">{list.length} produk</span></h2>
           <select className="sort" value={sort} aria-label="Urutkan" onChange={(e) => setSort(e.target.value as Sort)}>
             {SORTS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
           </select>
@@ -103,7 +112,7 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
                   </div>
                 </div>
                 <div className="cat-body">
-                  {p.category ? <div className="cat-kind">{p.category}</div> : null}
+                  {p.category ? <div className="cat-kind">{p.subcategory ? `${p.category} · ${p.subcategory}` : p.category}</div> : null}
                   <div className="cat-name">{p.name}</div>
                   <div className="cat-price money">{rp(p.price)}</div>
                   {hint ? <span className="tier-hint">{hint}</span> : null}
