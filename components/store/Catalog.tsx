@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { StoreData } from "@/lib/pos";
-import { cover, hasVariants, normBrand, num, promoTerms, promoTitle, rp, sizeEntries, strikePct, tierHint, tiersOf, variantCover, wasPrice, type Product } from "@/lib/store";
+import { cover, normBrand, num, promoTerms, promoTitle, rp, sizeEntries, strikePct, tierHint, tiersOf, variantCover, wasPrice, type Product } from "@/lib/store";
 import { tr } from "@/lib/i18n";
 
 type Sort = "rec" | "low" | "high" | "name";
@@ -132,7 +132,7 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
             const img = cover(p);
             const hint = tierHint(p);
             const left = stockOf(p);
-            const swatches = hasVariants(p) ? p.variants.slice(0, 4) : [];
+            const swatches = p.variants.length > 1 ? p.variants.slice(0, 4) : []; // one variant needs no swatch
             return (
               <button key={p.id} className="cat-card" data-act="product" data-id={p.id} onClick={() => onProduct(p.id)}>
                 <div className="cat-img">
