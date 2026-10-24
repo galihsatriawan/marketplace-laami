@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { hasVariants, num, rp, tiersOf, variantCover, type sheetState } from "@/lib/store";
+import { hasVariants, num, rp, strikePct, tiersOf, variantCover, wasPrice, type sheetState } from "@/lib/store";
 import { MoneyBig } from "./Money";
 import { Sheet } from "./Sheet";
 import { tr } from "@/lib/i18n";
@@ -65,7 +65,8 @@ export function ProductSheet({ state, closing, onClose, onVariant, onSize, onQty
           {p.category ? <div className="cat-kind">{p.subcategory ? `${p.category} · ${p.subcategory}` : p.category}</div> : null}
           <div className="pd-price">
             <span className="sum money"><MoneyBig value={price} /></span>
-            {price < p.price ? <span className="was">{rp(p.price)}</span> : null}
+            {wasPrice(p, price) ? <span className="was">{rp(wasPrice(p, price))}</span> : null}
+            {strikePct(p) > 0 && price === p.price ? <span className="tag-b sale">−{strikePct(p)}%</span> : null}
             <span className="small muted">{tr("/pcs")}</span>
             <button type="button" className="btn sm ghost share-btn" data-act="share" onClick={onShare}>
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5" /><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="19" r="2.5" /><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4" /></svg>{tr("Bagikan")}
