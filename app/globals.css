@@ -175,6 +175,7 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .tag-b{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:7px;font-size:11.5px;font-weight:700;background:var(--surface);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.12)}
 .tag-b.hue{background:var(--hue);color:#fff}
 .tag-b.warn{background:var(--pill-warn-bg);color:var(--pill-warn-ink)}
+.tag-b.sale{background:#c62828;color:#fff}
 .tag-b svg{width:11px;height:11px;fill:currentColor}
 .cat-body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
 .cat-name{font-weight:600;font-size:14px;line-height:19px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-height:38px}

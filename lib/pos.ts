@@ -15,7 +15,9 @@ export interface StoreData {
   ref?: { code: string; name: string } | null;
   /** Automatic promos running today (codes are never listed); older POS versions send none. */
   promos?: PublicPromo[];
-  products: { id: string; slug?: string; name: string; category?: string; subcategory?: string; price: number; tiers: { min: number; price: number }[];
+  products: { id: string; slug?: string; name: string; category?: string; subcategory?: string; price: number;
+    /** Struck-through price ("harga coret") shown next to `price`; display only, buyers pay `price`. Only sent when higher. */
+    strike?: number; tiers: { min: number; price: number }[];
     variants: { id: string; name: string; media: { url: string; type: "image" | "video" }[]; stock: Record<string, number> }[] }[];
 }
 /** An automatic promo as the POS lists it: "some" = only some products or categories. */

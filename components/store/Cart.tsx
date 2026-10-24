@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import type { Quote, StoreData } from "@/lib/pos";
 import { tr } from "@/lib/i18n";
 import {
-  cartBase, cartPcs, cartTotal, cover, findProduct, nextTier, normBrand, num, rp, unitPrice, variantCover, variantOf,
+  cartBase, cartPcs, cartTotal, cover, findProduct, nextTier, normBrand, num, rp, unitPrice, variantCover, wasPrice, variantOf,
   type Buyer, type CartLine, type Delivery, type View,
 } from "@/lib/store";
 
@@ -88,7 +88,7 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
                   <div className="grow">
                     <div className="t">{p.name}</div>
                     <div className="s">{v.name ? `${v.name} · ` : ""}{tr("Ukuran")} {c.size}</div>
-                    <div className="s">{u < p.price ? <span className="was">{rp(p.price)}</span> : null}{rp(u)}{tr("/pcs")}</div>
+                    <div className="s">{wasPrice(p, u) ? <span className="was">{rp(wasPrice(p, u))}</span> : null}{rp(u)}{tr("/pcs")}</div>
                     <div className="stepper sm">
                       <button type="button" className="btn sm" data-act="cart-dec" data-id={i} aria-label={tr("Kurangi")} onClick={() => onQty(i, c.qty - 1)}>−</button>
                       <span className="num">{c.qty}</span>

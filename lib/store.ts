@@ -96,6 +96,16 @@ export function unitPrice(p: Product, pcs: number) {
   for (const t of tiersOf(p)) if (pcs >= t.min) best = t;
   return best ? best.price : p.price;
 }
+/**
+ * The price shown crossed out next to a unit price: the shop's struck-through price when it is higher, else the
+ * normal price when a wholesale tier made it lower. 0 = nothing to cross out.
+ */
+export function wasPrice(p: Product, unit: number) {
+  if (num(p.strike) > unit) return num(p.strike);
+  return unit < p.price ? p.price : 0;
+}
+/** "-20%" for a product with a struck-through price (rounded down, so it never claims more than it saves). */
+export const strikePct = (p: Product) => (num(p.strike) > p.price ? Math.floor(((num(p.strike) - p.price) / num(p.strike)) * 100) : 0);
 export function cartTotal(d: StoreData, cart: CartLine[]) {
   const pcs = cartPcs(cart);
   return cart.reduce((a, c) => { const p = findProduct(d, c.productId); return a + (p ? unitPrice(p, pcs) * c.qty : 0); }, 0);

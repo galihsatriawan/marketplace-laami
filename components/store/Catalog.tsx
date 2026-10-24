@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { StoreData } from "@/lib/pos";
-import { cover, hasVariants, normBrand, num, promoTerms, promoTitle, rp, sizeEntries, tierHint, tiersOf, variantCover, type Product } from "@/lib/store";
+import { cover, hasVariants, normBrand, num, promoTerms, promoTitle, rp, sizeEntries, strikePct, tierHint, tiersOf, variantCover, wasPrice, type Product } from "@/lib/store";
 import { tr } from "@/lib/i18n";
 
 type Sort = "rec" | "low" | "high" | "name";
@@ -118,6 +118,7 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
                 <div className="cat-img">
                   {img ? <img src={img} alt="" loading="lazy" /> : <span>{p.name.slice(0, 1)}</span>}
                   <div className="cat-badges">
+                    {strikePct(p) > 0 ? <span className="tag-b sale">−{strikePct(p)}%</span> : null}
                     {tiersOf(p).length ? <span className="tag-b hue">{tr("Grosir")}</span> : null}
                     {video ? <span className="tag-b"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 2l7 4-7 4z" /></svg>{tr("Video")}</span> : null}
                     {left > 0 && left <= 3 ? <span className="tag-b warn">{tr("Sisa")} {left}</span> : null}
@@ -126,7 +127,7 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
                 <div className="cat-body">
                   {p.category ? <div className="cat-kind">{p.subcategory ? `${p.category} · ${p.subcategory}` : p.category}</div> : null}
                   <div className="cat-name">{p.name}</div>
-                  <div className="cat-price money">{rp(p.price)}</div>
+                  <div className="cat-price money">{wasPrice(p, p.price) ? <span className="was">{rp(wasPrice(p, p.price))}</span> : null}{rp(p.price)}</div>
                   {hint ? <span className="tier-hint">{hint}</span> : null}
                   <div className="cat-meta">
                     <span className="sz">{sizesOf(data, p).join(" · ")}</span>
