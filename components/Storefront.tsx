@@ -324,7 +324,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
         <div className="top-in">
           <button type="button" className="brand-link" aria-label={tr("Beranda toko")} onClick={() => { closeSheet(); go("katalog"); }}>
             <span id="brand-mark" className="brand-mark">{brand.logo ? <img className="mark logo" src={encodeURI(brand.logo)} alt="" /> : <Mark />}</span>
-            <span className="brand"><span id="brand-name">{data.shop || "Modern POS"}</span><small id="shop-sub">{tr("Toko online")}</small></span>
+            <span className="brand"><span id="brand-name">{data.shop || "Modern POS"}</span></span>
           </button>
           <label className="search">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></svg>

@@ -72,9 +72,8 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .mark{width:36px;height:36px;flex:none}
 .brand-mark{display:flex;flex:none}
 .mark.logo{border-radius:11px;object-fit:cover;background:var(--surface);border:1px solid var(--border)}
-.brand{font-weight:700;font-size:16px;line-height:19px;letter-spacing:-.01em;min-width:0}
+.brand{font-weight:800;font-size:17px;line-height:20px;letter-spacing:-.02em;min-width:0}
 .brand span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.brand small{display:block;color:var(--muted);font-size:12.5px;line-height:16px;font-weight:500}
 .search{grid-area:search;position:relative;min-width:0}
 .search svg{position:absolute;left:14px;top:50%;width:18px;height:18px;transform:translateY(-50%);fill:none;stroke:var(--muted);stroke-width:1.8;stroke-linecap:round}
 .search input{width:100%;height:44px;border-radius:999px;border:1px solid var(--border);background:var(--raised);padding:0 16px 0 42px;transition:border-color .2s,box-shadow .2s,background .2s}
@@ -94,44 +93,72 @@ h1,h2,h3{margin:0;text-wrap:balance}
   .cart-btn.wide .badge{position:static;box-shadow:none}
 }
 
-/* hero */
-.hero-band{position:relative;overflow:hidden;border-radius:24px;padding:24px 22px;color:#fff;
-  background:radial-gradient(120% 140% at 100% 0%,color-mix(in srgb,var(--hue) 55%,#fff) 0%,transparent 55%),linear-gradient(135deg,color-mix(in srgb,var(--hue) 88%,#000) 0%,var(--hue) 60%,color-mix(in srgb,var(--hue) 70%,#fff) 100%);
-  display:grid;gap:18px}
-.hero-band::after{content:"";position:absolute;right:-60px;bottom:-80px;width:260px;height:260px;border-radius:50%;background:rgba(255,255,255,.08)}
-.hero-txt{position:relative;z-index:1;display:flex;flex-direction:column;gap:8px;min-width:0}
-.eyebrow{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.85}
-.hero-band h1{font-size:clamp(28px,5vw,44px);line-height:1.05;font-weight:800;letter-spacing:-.03em}
-.hero-band p{margin:0;font-size:16px;line-height:23px;max-width:56ch;opacity:.95}
-.hero-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
-/* only real links get the pill look; plain facts (address) stay text so nothing looks tappable that isn't */
-.hero-meta span,.hero-meta a{display:inline-flex;align-items:center;gap:6px;min-height:30px;color:#fff;font-size:13px;font-weight:600;text-decoration:none}
-.hero-meta a{padding:0 12px;border-radius:999px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35)}
-.hero-meta a:hover{background:rgba(255,255,255,.28)}
-.hero-meta span{opacity:.92}
-.hero-meta svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.promos{position:relative;z-index:1;align-self:end;display:flex;flex-direction:column;gap:10px;min-width:0}
-.promo{position:relative;z-index:1;align-self:end;background:var(--surface);color:var(--text);border-radius:18px;padding:16px 18px;display:flex;flex-direction:column;gap:2px;box-shadow:var(--lift);max-width:340px}
+/* hero: the shop's name, intro and links on the left, a small collage of in-stock products on the right.
+   A light card tinted with the brand colour, so the products carry the colour rather than a big gradient. */
+.hero-band{position:relative;overflow:hidden;border-radius:24px;padding:22px 20px;color:var(--text);
+  background:radial-gradient(90% 120% at 0% 0%,color-mix(in srgb,var(--hue) 11%,var(--surface)) 0%,transparent 62%),var(--surface);
+  border:1px solid var(--border);box-shadow:var(--card-shadow);display:grid;gap:18px}
+.hero-txt{position:relative;z-index:1;display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-width:0}
+.hero-band h1{font-size:clamp(32px,6vw,58px);line-height:1;font-weight:800;letter-spacing:-.04em;max-width:100%;overflow-wrap:anywhere}
+.hero-band p{margin:0;font-size:16px;line-height:24px;max-width:46ch;color:var(--muted)}
+.hero-via{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 12px;border-radius:999px;background:var(--hue-soft);color:var(--hue-ink);font-size:13px;font-weight:700}
+/* the address is a plain fact, not a link: text only, so nothing looks tappable that isn't */
+.hero-addr{display:inline-flex;align-items:flex-start;gap:6px;color:var(--muted);font-size:13.5px;line-height:19px;font-weight:500}
+.hero-addr svg{margin-top:2px}
+.hero-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.hl{display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:0 15px 0 13px;border-radius:999px;border:1px solid var(--control);background:var(--surface);color:var(--text);font-size:14px;font-weight:650;text-decoration:none;transition:background .2s,border-color .2s,transform .15s var(--ease)}
+.hl:hover{background:var(--raised);border-color:color-mix(in srgb,var(--hue) 40%,var(--control))}
+.hl:active{transform:scale(.97)}
+.hl-main{background:var(--hue);border-color:var(--hue);color:#fff}
+.hl-main:hover{background:color-mix(in srgb,var(--hue) 88%,#000);border-color:transparent}
+/* in dark mode the accent is lightened, so the main link takes dark text */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .hl-main{color:#0c0d0c}}
+:root[data-theme="dark"] .hl-main{color:#0c0d0c}
+.hero-via svg,.hero-addr svg,.hl svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.hero-shots{position:relative;z-index:1;display:grid;gap:8px;padding:8px;border-radius:22px;height:190px;
+  background:color-mix(in srgb,var(--hue) 14%,var(--surface));grid-template-columns:repeat(3,minmax(0,1fr))}
+.hero-shots.n1{grid-template-columns:minmax(0,1fr)}
+.hero-shots.n2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.shot{position:relative;display:block;min-height:0;padding:0;border:0;border-radius:15px;overflow:hidden;background:var(--raised);cursor:pointer}
+.shot img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .5s var(--ease)}
+.shot:hover img{transform:scale(1.04)}
+.promos{position:relative;z-index:1;display:flex;gap:10px;min-width:0;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x mandatory;margin:0 -20px;padding:0 20px}
+.promos::-webkit-scrollbar{display:none}
+.promo{position:relative;z-index:1;flex:1 0 min(78%,300px);scroll-snap-align:start;background:color-mix(in srgb,var(--hue) 7%,var(--surface));color:var(--text);
+  border:1px solid color-mix(in srgb,var(--hue) 22%,var(--border));border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:2px}
 .promo .k{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--hue)}
-.promo b{font-size:18px;line-height:24px;font-weight:800;letter-spacing:-.01em}
-.promo span{color:var(--muted);font-size:13.5px;line-height:19px}
-.promos .promo{align-self:stretch}
+.promo b{font-size:17px;line-height:23px;font-weight:800;letter-spacing:-.01em}
+.promo span{color:var(--muted);font-size:13px;line-height:18px}
 .promo-row{display:flex;gap:8px}
 .promo-row .in{flex:1;min-width:0;text-transform:uppercase}
 .promo-msg{font-size:13px;line-height:18px;font-weight:600}
 .promo-msg.ok{color:var(--hue-ink)}
 .promo-msg.bad{color:var(--negative,#c0392b)}
-@media (min-width:768px){.hero-band{grid-template-columns:minmax(0,1fr) auto;padding:36px 36px;align-items:end;border-radius:28px}}
-
+@media (min-width:768px){
+  .hero-band{padding:36px;border-radius:28px;gap:22px 36px;align-items:center}
+  .hero-band.has-shots{grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr)}
+  .hero-shots{height:300px;padding:10px;gap:10px;border-radius:24px;grid-template-rows:repeat(2,minmax(0,1fr))}
+  /* three photos: one tall on the left, two stacked on the right */
+  .hero-shots.n3{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}
+  .hero-shots.n3 .s0{grid-row:span 2}
+  .hero-shots.n1 .s0,.hero-shots.n2 .shot{grid-row:span 2}
+  .promos{grid-column:1/-1;margin:0;padding:0;overflow:visible}
+  .promo{flex:1 1 0;max-width:420px}
+}
+@media (min-width:1100px){.hero-band{padding:44px 48px}.hero-shots{height:340px}}
 @media (max-width:640px){
-  .hero-band{padding:20px 18px;gap:14px;border-radius:20px}
-  .hero-band p{font-size:14.5px;line-height:21px}
-  .hero-meta{margin-top:2px}
-  .hero-meta span,.hero-meta a{min-height:28px;font-size:12.5px}
-  .hero-meta a{padding:0 10px}
-  .promo{padding:12px 14px;border-radius:14px;max-width:none}
+  .hero-band{padding:20px 18px;gap:16px;border-radius:22px}
+  .hero-band p{font-size:15px;line-height:22px}
+  /* one swipeable row of links keeps the hero short on phones */
+  .hero-links{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;align-self:stretch;margin:2px -18px 0;padding:0 18px}
+  .hero-links::-webkit-scrollbar{display:none}
+  .hl{min-height:38px;font-size:13.5px;flex:none}
+  .hero-shots{height:128px;gap:6px;padding:6px;border-radius:18px}
+  .shot{border-radius:13px}
+  .promos{margin:0 -18px;padding:0 18px}
+  .promo{padding:12px 14px;border-radius:14px}
   .promo b{font-size:16px;line-height:21px}
-  .promo span{display:none}
+  .promo span:not(.k){display:none}
   /* a promo's terms matter (min. spend, end date): keep them, small */
   .promo-deal span:not(.k){display:block;font-size:12.5px;line-height:17px}
 }
