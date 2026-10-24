@@ -138,7 +138,6 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
                 <div className="cat-img">
                   {img ? <img src={img} alt="" loading="lazy" /> : <span>{p.name.slice(0, 1)}</span>}
                   <div className="cat-badges">
-                    {strikePct(p) > 0 ? <span className="tag-b sale">−{strikePct(p)}%</span> : null}
                     {tiersOf(p).length ? <span className="tag-b hue">{tr("Grosir")}</span> : null}
                     {video ? <span className="tag-b"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 2l7 4-7 4z" /></svg>{tr("Video")}</span> : null}
                     {left > 0 && left <= 3 ? <span className="tag-b warn">{tr("Sisa")} {left}</span> : null}
@@ -147,10 +146,13 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
                 <div className="cat-body">
                   {p.category ? <div className="cat-kind">{p.subcategory ? `${p.category} · ${p.subcategory}` : p.category}</div> : null}
                   <div className="cat-name">{p.name}</div>
-                  <div className="cat-price money">{wasPrice(p, p.price) ? <span className="was">{rp(wasPrice(p, p.price))}</span> : null}{rp(p.price)}</div>
+                  <div className="cat-price money">
+                    <span className="now">{rp(p.price)}</span>
+                    {wasPrice(p, p.price) ? <span className="cat-was"><span className="was">{rp(wasPrice(p, p.price))}</span>{strikePct(p) > 0 ? <span className="off">−{strikePct(p)}%</span> : null}</span> : null}
+                  </div>
                   {hint ? <span className="tier-hint">{hint}</span> : null}
                   <div className="cat-meta">
-                    <span className="sz">{sizesOf(data, p).join(" · ")}</span>
+                    <span className="sz">{sizesOf(data, p).map((z) => <i key={z}>{z}</i>)}</span>
                     {swatches.length ? (
                       <span className="swatches" aria-label={tr("{n} variasi", { n: p.variants.length })}>
                         {swatches.map((v) => { const c = variantCover(v); return c ? <img key={v.id} src={c} alt="" /> : <span key={v.id}>{(v.name || "?").slice(0, 1)}</span>; })}
@@ -171,20 +173,28 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
       )}
 
       <footer className="shop-foot">
-        <div>
-          <h3>{tr("Cara belanja")}</h3>
+        <section className="foot-how" aria-labelledby="foot-how-h">
+          <h3 id="foot-how-h">{tr("Cara belanja")}</h3>
           <ol className="steps">
-            <li><i><Tag /></i><div><b>{tr("Pilih baju")}</b>{tr("Variasi dan ukuran, lalu masukkan keranjang. Beli banyak dapat harga grosir.")}</div></li>
-            <li><i><Bag /></i><div><b>{tr("Ambil atau dikirim")}</b>{tr("Isi nama dan nomor WhatsApp, pilih diambil di toko atau dikirim.")}</div></li>
-            <li><i><Chat /></i><div><b>{tr("Pesan lewat WhatsApp")}</b>{tr("Pesan sudah terisi, tinggal tekan kirim ke penjual.")}</div></li>
+            <li><i><Tag /></i><div><b>{tr("Pilih baju")}</b><span>{tr("Pilih variasi dan ukuran, lalu masukkan keranjang.")}</span></div></li>
+            <li><i><Bag /></i><div><b>{tr("Ambil atau dikirim")}</b><span>{tr("Isi nama dan WhatsApp, pilih ambil di toko atau dikirim.")}</span></div></li>
+            <li><i><Chat /></i><div><b>{tr("Kirim lewat WhatsApp")}</b><span>{tr("Pesan sudah terisi, tinggal tekan kirim.")}</span></div></li>
           </ol>
-        </div>
-        <div>
-          <h3>{data.shop}</h3>
-          {brand.address ? <div>{brand.address}</div> : null}
-          {brand.instagram ? <div>{tr("Instagram")} {brand.instagram}</div> : null}
-          <div className="fine">{tr("Harga grosir dihitung dari total pcs di keranjang. Ongkir dikabari toko lewat WhatsApp.")}</div>
-        </div>
+          <p className="fine">{tr("Harga grosir dihitung dari total pcs di keranjang, boleh campur model. Ongkir dikabari toko lewat WhatsApp.")}</p>
+        </section>
+        <section className="foot-shop" aria-label={data.shop}>
+          <div className="foot-id">
+            {brand.logo ? <img className="foot-logo" src={encodeURI(brand.logo)} alt="" /> : null}
+            <b>{data.shop}</b>
+          </div>
+          {brand.address ? <span className="foot-addr"><Pin />{brand.address}</span> : null}
+          {links.length ? (
+            <div className="foot-links">
+              {links.map((l) => <a key={l.k} href={l.href} target="_blank" rel="noopener noreferrer" aria-label={l.label}>{l.icon}<span>{l.label}</span></a>)}
+            </div>
+          ) : null}
+          <span className="foot-copy">© {new Date().getFullYear()} {data.shop}</span>
+        </section>
       </footer>
     </>
   );

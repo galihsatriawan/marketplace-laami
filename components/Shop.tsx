@@ -22,6 +22,12 @@ const load = async (r: ShopRoute): Promise<StoreResult> =>
 export const findBySlug = (d: StoreData, key?: string) =>
   key ? d.products.find((p) => p.slug === key || p.id === key) : undefined;
 
+/** The browser-tab icon: the shop's logo from the POS brand settings, else the default mark. */
+const shopIcons = (d: StoreData): Metadata["icons"] => {
+  const logo = d.brand?.logo ? encodeURI(d.brand.logo) : "";
+  return logo ? { icon: [{ url: logo }], apple: [{ url: logo }] } : { icon: "/icon.svg" };
+};
+
 const rpText = (n: number) => `Rp${Math.round(n).toLocaleString("id-ID")}`;
 
 export async function shopMetadata(route: ShopRoute): Promise<Metadata> {
@@ -35,10 +41,10 @@ export async function shopMetadata(route: ShopRoute): Promise<Metadata> {
     const tier = p.tiers[0];
     const description = tr("{price}{tier}. Pesan langsung lewat WhatsApp di {shop}.", { price: rpText(p.price), tier: tier ? tr(" · beli {min}+ pcs {price}/pcs", { min: tier.min, price: rpText(tier.price) }) : "", shop: d.shop });
     const title = `${p.name} · ${d.shop}`;
-    return { title, description, openGraph: { title, description, siteName: d.shop, type: "website", images: img ? [{ url: img }] : undefined }, twitter: { card: img ? "summary_large_image" : "summary" } };
+    return { title, description, icons: shopIcons(d), openGraph: { title, description, siteName: d.shop, type: "website", images: img ? [{ url: img }] : undefined }, twitter: { card: img ? "summary_large_image" : "summary" } };
   }
   const description = d.intro || tr("Belanja di {shop}. Pesan langsung lewat WhatsApp.", { shop: d.shop });
-  return { title: d.shop, description, openGraph: { title: d.shop, description, siteName: d.shop, type: "website", images: d.brand.logo ? [{ url: d.brand.logo }] : undefined } };
+  return { title: d.shop, description, icons: shopIcons(d), openGraph: { title: d.shop, description, siteName: d.shop, type: "website", images: d.brand.logo ? [{ url: d.brand.logo }] : undefined } };
 }
 
 /** One shop's storefront, or a friendly message when it cannot be opened. */

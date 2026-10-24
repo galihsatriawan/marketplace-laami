@@ -7,6 +7,8 @@ import { LangProvider } from "@/lib/i18n/LangProvider";
 export const metadata: Metadata = {
   title: "Toko online",
   description: "Pilih baju, masukkan keranjang, lalu pesan lewat WhatsApp.",
+  // Shop pages replace this with the shop's own logo (see shopMetadata).
+  icons: { icon: "/icon.svg" },
 };
 
 export const viewport: Viewport = {
