@@ -3,7 +3,7 @@
 Toko online publik untuk usaha yang memakai **Modern POS**. Pembeli tidak perlu login:
 
 1. Lihat katalog (foto/video, variasi, ukuran, stok). Harga = harga toko di POS; harga grosir (misal "Beli 3+ Rp24.000/pcs") otomatis dipakai dari **total pcs keranjang**, boleh campur model.
-2. Masukkan keranjang (tersimpan di browser), isi nama, no. WhatsApp, diambil di toko / dikirim (alamat), catatan.
+2. Masukkan keranjang (tersimpan di browser), isi nama, no. WhatsApp, diambil di toko / dikirim (alamat), catatan. Promo otomatis dari POS tampil di banner dan langsung terpotong di keranjang; pembeli juga bisa mengetik **kode promo/voucher**. Potongannya dihitung POS (`POST /api/public/stores/<slug>/quote`), satu promo per pesanan.
 3. Tekan **Pesan lewat WhatsApp**: pesanan dikirim ke POS (dihitung ulang dan dicek stoknya di server), lalu WhatsApp terbuka dengan pesan pesanan yang sudah terisi ke nomor toko. Pesanan juga muncul di POS (Penjualan › Pesanan web) untuk diproses pemilik.
 
 Semua data (produk, harga, stok, brand) diambil dari API publik POS; aplikasi ini tidak punya database.

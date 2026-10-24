@@ -3,9 +3,9 @@
 // Public storefront: catalog -> cart -> checkout. The order goes to the POS (re-priced and checked there) and the
 // buyer sends the composed message to the shop's WhatsApp. Laid out like a modern marketplace: search in the header, grid catalog, dialog product page.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import type { StoreData } from "@/lib/pos";
+import type { Quote, StoreData } from "@/lib/pos";
 import {
-  applyBrandColor, cartBase, cartKey, productPath, REF_DAYS, refKey, cartPcs, cartTotal, clampCart, doneKey, findProduct, loadBuyer, local, mediaOf,
+  applyBrandColor, cartBase, cartKey, codeKey, productPath, REF_DAYS, refKey, cartPcs, cartTotal, clampCart, doneKey, findProduct, loadBuyer, local, mediaOf,
   normBrand, rp, saveBuyer, session, sheetState, uid, unitPrice, variantOf, variantStock,
   type Buyer, type CartLine, type DoneOrder, type Ref, type SheetPick, type View,
 } from "@/lib/store";
@@ -20,7 +20,7 @@ import { LangSwitch } from "@/lib/i18n/LangSwitch";
 
 type SheetState = { pick: SheetPick; closing: boolean; key: number };
 type ViewerState = { productId: string; variantId?: string; start: number };
-type OrderReply = { code?: string; waUrl?: string; total?: number; pcs?: number; tier?: boolean; error?: string };
+type OrderReply = { code?: string; waUrl?: string; total?: number; pcs?: number; tier?: boolean; promo?: { name: string; amount: number } | null; error?: string };
 
 type Props = {
   data: StoreData; api: string;
@@ -47,6 +47,11 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   const [viewer, setViewer] = useState<ViewerState | null>(null);
   const [toast, setToast] = useState<{ msg: string; key: number } | null>(null);
   const [ref, setRef] = useState<Ref | null>(null);
+  // promo code the buyer applied, and the shop's price for the cart with its promo (typed code or automatic)
+  const [code, setCodeState] = useState("");
+  const [quoted, setQuote] = useState<(Quote & { forCode: string }) | null>(null);
+  // a quote for another code is never shown (its subtotal is checked against the cart too)
+  const quote = quoted && quoted.forCode === code ? quoted : null;
   // The store's home path; through a reseller's link it keeps their /r/<code> so shared links still count for them.
   const home = `${base}${ref ? `/r/${ref.code}` : ""}`;
   const homeRef = useRef(home);
@@ -119,6 +124,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     local.set(cartKey(slug), clamped);
     setCart(clamped);
     setBuyer(loadBuyer());
+    setCodeState(session.get<string>(codeKey(slug), "") || "");
     const d = session.get<DoneOrder | null>(doneKey(slug), null);
     if (d) { setDone(d); setView("selesai"); }
     // A reseller's link the POS recognised wins; otherwise the last one opened, if recent enough.
@@ -204,6 +210,31 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     closeSheet();
   };
 
+  const setCode = (c: string) => {
+    orderId.current = null;
+    setCodeState(c);
+    session.set(codeKey(slug), c || null);
+  };
+
+  // Ask the shop what the cart costs with its promo whenever the cart, code or phone (once-per-buyer promos) changes.
+  const wantsQuote = ready && view === "keranjang" && cart.length > 0 && (!!code || !!data.promos?.length);
+  const phoneDigits = buyer.phone.replace(/\D/g, "");
+  useEffect(() => {
+    if (!wantsQuote) { setQuote(null); return; }
+    let live = true;
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`${api}/api/public/stores/${slug}/quote`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ items: cart, code, phone: phoneDigits, ...(refCode.current ? { ref: refCode.current } : {}) }),
+        });
+        const j = (await r.json().catch(() => null)) as Quote | null;
+        if (live) setQuote(r.ok && j ? { ...j, forCode: code } : null);
+      } catch { if (live) setQuote(null); }
+    }, 300);
+    return () => { live = false; clearTimeout(t); };
+  }, [wantsQuote, api, slug, cart, code, phoneDigits]);
+
   const updateBuyer = (patch: Partial<Buyer>) => {
     // new details make a new order: a resend with the old id would get the old details back
     if (Object.entries(patch).some(([k, v]) => buyerRef.current[k as keyof Buyer] !== v)) orderId.current = null;
@@ -224,7 +255,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
       res = await fetch(`${api}/api/public/stores/${slug}/orders`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: orderId.current, items: cart, name, phone, address: ship ? address : "", delivery: buyer.delivery, note: buyer.note || "", ...(ref ? { ref: ref.code } : {}) }),
+        body: JSON.stringify({ id: orderId.current, items: cart, name, phone, address: ship ? address : "", delivery: buyer.delivery, note: buyer.note || "", ...(ref ? { ref: ref.code } : {}), ...(code ? { code } : {}) }),
       });
       reply = (await res.json().catch(() => ({}))) as OrderReply;
     } catch {
@@ -238,13 +269,15 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
       if (res.status === 409) { orderId.current = null; await refresh(); }
       return;
     }
-    const placed: DoneOrder = { code: reply.code ?? "", waUrl: reply.waUrl ?? "", total: reply.total ?? 0, pcs: reply.pcs ?? 0, tier: !!reply.tier };
-    // the shop priced it with its latest prices; say so when that differs from what the cart showed
-    if (reply.total !== undefined && reply.total !== cartTotal(data, cart)) showToast(tr("Harga sudah diperbarui toko. Total pesananmu {total}.", { total: rp(reply.total) }));
+    const placed: DoneOrder = { code: reply.code ?? "", waUrl: reply.waUrl ?? "", total: reply.total ?? 0, pcs: reply.pcs ?? 0, tier: !!reply.tier, promo: reply.promo ?? null };
+    // the shop priced it with its latest prices and promo; say so when that differs from what the cart showed
+    const shown = cartTotal(data, cart) - (quote && quote.subtotal === cartTotal(data, cart) && quote.promo ? quote.promo.amount : 0);
+    if (reply.total !== undefined && reply.total !== shown) showToast(tr("Harga sudah diperbarui toko. Total pesananmu {total}.", { total: rp(reply.total) }));
     setDone(placed);
     session.set(doneKey(slug), placed);
     saveCart([]);
     updateBuyer({ note: "" });
+    setCode("");
     go("selesai");
     // The link on the done view is what the buyer taps if the browser blocks this jump.
     setTimeout(() => { try { window.location.href = placed.waUrl; } catch { /* ignore */ } }, 400);
@@ -260,7 +293,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     content = (
       <Cart data={data} cart={cart} buyer={buyer} busy={busy} onGo={(v) => { closeSheet(); go(v); }} onClear={() => saveCart([])}
         onQty={(i, qty) => saveCart(qty > 0 ? cart.map((c, j) => (j === i ? { ...c, qty } : c)) : cart.filter((_, j) => j !== i))}
-        onBuyer={updateBuyer} onToast={showToast} onPlace={(c) => void placeOrder(c)} />
+        onBuyer={updateBuyer} onToast={showToast} onPlace={(c) => void placeOrder(c)} code={code} quote={quote} onCode={setCode} />
     );
   } else if (view === "selesai" && done) {
     content = <Done order={done} shop={data.shop} onNew={() => { setDone(null); session.set(doneKey(slug), null); go("katalog"); }} />;
