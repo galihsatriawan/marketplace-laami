@@ -1,5 +1,5 @@
 // Storefront logic shared by the browser components: types, money formatting, wholesale pricing, storage.
-import type { StoreData } from "./pos";
+import type { PublicPromo, StoreData } from "./pos";
 import { tr } from "@/lib/i18n";
 
 export type Product = StoreData["products"][number];
@@ -13,7 +13,7 @@ export type Delivery = "pickup" | "ship";
 export interface CartLine { productId: string; variantId: string; size: string; qty: number }
 export interface Buyer { name: string; phone: string; address: string; delivery: Delivery; note: string }
 /** The last placed order, kept for this browser tab so the "done" view survives the jump to WhatsApp. */
-export interface DoneOrder { code: string; waUrl: string; total: number; pcs: number; tier: boolean }
+export interface DoneOrder { code: string; waUrl: string; total: number; pcs: number; tier: boolean; promo?: { name: string; amount: number } | null }
 /** Product sheet selection. size is the buyer's pick; the sheet falls back to an in-stock size. */
 export interface SheetPick { productId: string; variantId: string; size?: string; qty: number }
 
@@ -23,6 +23,8 @@ export const refKey = (slug: string) => `toko.ref.${slug}`;
 export const REF_DAYS = 30;
 export interface Ref { code: string; name: string; at: number }
 export const doneKey = (slug: string) => `toko.done.${slug}`;
+/** The promo code typed in the cart, kept for this browser tab. */
+export const codeKey = (slug: string) => `toko.code.${slug}`;
 export const BUYER_KEY = "toko.buyer";
 
 export const num = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -137,4 +139,21 @@ export function sheetState(d: StoreData, cart: CartLine[], pick: SheetPick) {
   const qty = pick.qty > max ? Math.max(1, max) : pick.qty;
   const price = unitPrice(p, cartPcs(cart) + qty);
   return { p, v, sizes, size, have, inCart, max, qty, price, media: mediaOf(p, v) };
+}
+
+/* promos */
+const shortDate = (d: string) => { const [y, m, dd] = d.split("-").map(Number); return y ? new Date(y, m - 1, dd).toLocaleDateString("id-ID", { day: "numeric", month: "short" }) : ""; };
+/** Headline of a promo card, e.g. "Diskon 10%" or "Potongan Rp20.000". */
+export const promoTitle = (p: PublicPromo) => (p.type === "percent" ? tr("Diskon {v}%", { v: p.value }) : tr("Potongan {rp}", { rp: rp(p.value) }));
+/** The fine print: cap, minimums, scope, end date. */
+export function promoTerms(p: PublicPromo) {
+  return [
+    p.type === "percent" && p.maxOff ? tr("maks. {rp}", { rp: rp(p.maxOff) }) : "",
+    p.minSpend ? tr("min. belanja {rp}", { rp: rp(p.minSpend) }) : "",
+    p.minPcs ? tr("min. {n} pcs", { n: p.minPcs }) : "",
+    p.scope === "some" ? tr("produk tertentu") : "",
+    !p.withWholesale ? tr("tidak untuk harga grosir") : "",
+    p.oncePerBuyer ? tr("1× per pembeli") : "",
+    p.end ? tr("s/d {date}", { date: shortDate(p.end) }) : "",
+  ].filter(Boolean).join(" · ");
 }

@@ -110,10 +110,17 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .hero-meta a:hover{background:rgba(255,255,255,.28)}
 .hero-meta span{opacity:.92}
 .hero-meta svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.promos{position:relative;z-index:1;align-self:end;display:flex;flex-direction:column;gap:10px;min-width:0}
 .promo{position:relative;z-index:1;align-self:end;background:var(--surface);color:var(--text);border-radius:18px;padding:16px 18px;display:flex;flex-direction:column;gap:2px;box-shadow:var(--lift);max-width:340px}
 .promo .k{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--hue)}
 .promo b{font-size:18px;line-height:24px;font-weight:800;letter-spacing:-.01em}
 .promo span{color:var(--muted);font-size:13.5px;line-height:19px}
+.promos .promo{align-self:stretch}
+.promo-row{display:flex;gap:8px}
+.promo-row .in{flex:1;min-width:0;text-transform:uppercase}
+.promo-msg{font-size:13px;line-height:18px;font-weight:600}
+.promo-msg.ok{color:var(--hue-ink)}
+.promo-msg.bad{color:var(--negative,#c0392b)}
 @media (min-width:768px){.hero-band{grid-template-columns:minmax(0,1fr) auto;padding:36px 36px;align-items:end;border-radius:28px}}
 
 @media (max-width:640px){
@@ -125,6 +132,8 @@ h1,h2,h3{margin:0;text-wrap:balance}
   .promo{padding:12px 14px;border-radius:14px;max-width:none}
   .promo b{font-size:16px;line-height:21px}
   .promo span{display:none}
+  /* a promo's terms matter (min. spend, end date): keep them, small */
+  .promo-deal span:not(.k){display:block;font-size:12.5px;line-height:17px}
 }
 
 /* toolbar */

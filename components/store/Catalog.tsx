@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { StoreData } from "@/lib/pos";
-import { cover, hasVariants, normBrand, num, rp, sizeEntries, tierHint, tiersOf, variantCover, type Product } from "@/lib/store";
+import { cover, hasVariants, normBrand, num, promoTerms, promoTitle, rp, sizeEntries, tierHint, tiersOf, variantCover, type Product } from "@/lib/store";
 import { tr } from "@/lib/i18n";
 
 type Sort = "rec" | "low" | "high" | "name";
@@ -55,11 +55,22 @@ export function Catalog({ data, query, via, onProduct, onClearQuery }: Props) {
             {wa ? <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer"><Chat />{tr("WhatsApp")}</a> : null}
           </div>
         </div>
-        {best ? (
-          <div className="promo">
-            <span className="k">{tr("Grosir campur model")}</span>
-            <b>{tr("Beli {min}+ pcs mulai", { min: best.min })} {rp(best.price)}</b>
-            <span>{tr("Dihitung dari total keranjang, boleh beda model dan ukuran.")}</span>
+        {best || data.promos?.length ? (
+          <div className="promos">
+            {(data.promos || []).slice(0, 2).map((p, i) => (
+              <div className="promo promo-deal" key={i}>
+                <span className="k">{p.name}</span>
+                <b>{promoTitle(p)}</b>
+                <span>{promoTerms(p) || tr("Otomatis terpotong di keranjang.")}</span>
+              </div>
+            ))}
+            {best ? (
+              <div className="promo">
+                <span className="k">{tr("Grosir campur model")}</span>
+                <b>{tr("Beli {min}+ pcs mulai", { min: best.min })} {rp(best.price)}</b>
+                <span>{tr("Dihitung dari total keranjang, boleh beda model dan ukuran.")}</span>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </section>

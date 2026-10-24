@@ -13,9 +13,19 @@ export interface StoreData {
   subcategories?: Record<string, string[]>;
   /** A reseller's link (?ref=code) the POS recognised: whose link the buyer opened. */
   ref?: { code: string; name: string } | null;
+  /** Automatic promos running today (codes are never listed); older POS versions send none. */
+  promos?: PublicPromo[];
   products: { id: string; slug?: string; name: string; category?: string; subcategory?: string; price: number; tiers: { min: number; price: number }[];
     variants: { id: string; name: string; media: { url: string; type: "image" | "video" }[]; stock: Record<string, number> }[] }[];
 }
+/** An automatic promo as the POS lists it: "some" = only some products or categories. */
+export interface PublicPromo {
+  name: string; type: "percent" | "amount"; value: number; maxOff: number; minSpend: number; minPcs: number; end: string;
+  scope: "all" | "some"; withWholesale: boolean; oncePerBuyer: boolean;
+}
+/** The POS's price for a cart with its promo (a typed code, else the best automatic one). `error`: why a code does not work. */
+export interface Quote { pcs: number; subtotal: number; total: number; tier: boolean; promo: { id: string; name: string; code?: string; amount: number } | null; error?: string;
+  /** The reason as a template + values, for tr(). */ errorTpl?: string; errorVars?: Record<string, string | number> }
 export type StoreResult = { ok: true; data: StoreData } | { ok: false; status: number };
 
 /** Loads a shop's public catalog from the POS. 404 when the shop is unknown or switched off. */
