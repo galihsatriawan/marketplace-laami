@@ -57,7 +57,7 @@ export const saveBuyer = (b: Buyer) => local.set(BUYER_KEY, { name: b.name, phon
 
 const HEX = /^#[0-9a-f]{6}$/i;
 export const normBrand = (b: unknown): Brand => ({
-  logo: "", color: "", address: "", instagram: "", website: "",
+  logo: "", color: "", address: "", instagram: "", website: "", shopee: "", tiktok: "",
   ...(b && typeof b === "object" ? (b as Partial<Brand>) : {}),
 });
 /** Brand colour as the accent on <html>, like the Modern POS apps. */

@@ -5,7 +5,9 @@ export const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
 
 export interface StoreData {
   slug: string; shop: string; intro: string; whatsapp: string;
-  brand: { logo: string; color: string; address: string; instagram: string; website: string };
+  brand: { logo: string; color: string; address: string; instagram: string; website: string;
+    /** Shop links on Shopee / TikTok Shop without "https://"; older POS versions send none. */
+    shopee?: string; tiktok?: string };
   sizes: string[];
   /** Categories in use, sorted; older POS versions send none. */
   categories?: string[];

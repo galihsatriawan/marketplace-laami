@@ -107,7 +107,6 @@ export const EN: Record<string, string> = {
   "Tidak ada koneksi internet. Coba lagi.": "No internet connection. Try again.",
   "Tidak ada yang cocok.": "No matches.",
   "Toko online": "Online store",
-  "Toko online resmi": "Official online store",
   "Toko sedang tidak bisa dibuka": "The store can't be opened right now",
   "Toko sedang tutup.": "The store is closed.",
   "Toko tidak ditemukan": "Store not found",
