@@ -23,6 +23,10 @@ export interface StoreData {
   showSoldOut?: boolean;
   /** How buyers pay the shop (bank accounts, e-wallets, QRIS image, note); null or absent when the shop set none. */
   payment?: StorePayment | null;
+  /** The shop's own "Cara belanja" / "Cara retur / tukar" steps; empty `order` = the built-in steps, empty `returns` = none. */
+  steps?: StoreSteps;
+  /** How shipping is priced: "rajaongkir" = live courier rates at checkout; "manual" = the shop tells the cost on WhatsApp. */
+  shipping?: StoreShipping;
   products: { id: string; slug?: string; name: string; category?: string; subcategory?: string; price: number;
     /** v2 badges: arrived recently (or marked new), among the shop's bestsellers (rank 1 = top), nothing left. */
     isNew?: boolean; bestseller?: boolean; bestsellerRank?: number; soldOut?: boolean;
@@ -42,6 +46,19 @@ export interface StorePayment {
   qris?: string;
   note: string;
 }
+export interface Step { title: string; text: string }
+export interface StoreSteps { order: Step[]; returns: Step[]; returnNote: string }
+/** A free-shipping area ("Gratis ongkir area Sumberpucung"); minSpend 0 = any order. */
+export interface FreeArea { name: string; minSpend: number }
+export interface StoreShipping { provider: "manual" | "rajaongkir"; freeAreas: FreeArea[]; badge: boolean }
+/** A place a parcel can go, from the shop's destination search. free: inside one of the shop's free-shipping areas. */
+export interface Destination { id: number | string; label: string; district?: string; city?: string; province?: string; zip?: string; free?: boolean }
+/** One courier service with its price for this cart. */
+export interface ShipOption { courier: string; courierName: string; service: string; description: string; cost: number; etd: string }
+/** The shop's shipping price for a cart to one destination. free: the order ships free (minSpend met). */
+export interface ShipQuote { weight: number; free: boolean; freeArea?: string; minSpendLeft?: number; options: ShipOption[] }
+/** Shipping as the shop priced it on a placed order. */
+export interface OrderShipping { destinationLabel: string; courier: string; courierName?: string; service: string; etd?: string; cost: number; free?: boolean; freeArea?: string }
 /** An automatic promo as the POS lists it: "some" = only some products or categories. */
 export interface PublicPromo {
   name: string; type: "percent" | "amount"; value: number; maxOff: number; minSpend: number; minPcs: number; end: string;

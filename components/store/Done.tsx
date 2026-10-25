@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { StorePayment } from "@/lib/pos";
 import { rp, type DoneOrder } from "@/lib/store";
 import { tr } from "@/lib/i18n";
+import { fmtEtd } from "./Shipping";
+import { ReturnsLink } from "./Steps";
 
 type Props = {
   order: DoneOrder; shop: string; whatsapp: string; payment: StorePayment | null;
@@ -11,6 +13,8 @@ type Props = {
   onToast: (msg: string) => void;
   /** Open a picture (the QRIS) in the zoomable viewer. */
   onZoom: (url: string) => void;
+  /** Opens "Cara retur / tukar"; absent when the shop wrote none. */
+  onReturns?: () => void;
 };
 
 /** Copies text; true when it worked (older browsers and http pages fall back to a hidden textarea). */
@@ -48,7 +52,7 @@ function CopyBtn({ text, label, what, onToast, id }: { text: string; label: stri
 const localPhone = (wa: string) => { const d = wa.replace(/\D/g, ""); return d.startsWith("62") ? "0" + d.slice(2) : d; };
 
 /** How to pay: bank accounts and e-wallets with copy buttons, the QRIS picture, the shop's note. */
-function PayInfo({ payment, total, onToast, onZoom }: { payment: StorePayment; total: number; onToast: (m: string) => void; onZoom: (url: string) => void }) {
+function PayInfo({ payment, total, shipped, onToast, onZoom }: { payment: StorePayment; total: number; shipped: boolean; onToast: (m: string) => void; onZoom: (url: string) => void }) {
   const rows = [
     ...payment.banks.map((b) => ({ k: `b-${b.bank}-${b.number}`, name: b.bank, number: b.number, holder: b.holder, kind: tr("Transfer bank") })),
     ...payment.wallets.map((w) => ({ k: `w-${w.wallet}-${w.number}`, name: w.wallet, number: w.number, holder: w.holder, kind: tr("E-wallet") })),
@@ -58,7 +62,7 @@ function PayInfo({ payment, total, onToast, onZoom }: { payment: StorePayment; t
     <section className="pay" aria-labelledby="pay-h" id="pay">
       <div className="pay-h">
         <h2 id="pay-h">{tr("Cara bayar")}</h2>
-        <span className="pay-amt">{tr("Total {total}", { total: rp(total) })}<span className="muted"> · {tr("+ ongkir bila dikirim")}</span></span>
+        <span className="pay-amt">{tr("Total {total}", { total: rp(total) })}{shipped ? null : <span className="muted"> · {tr("+ ongkir bila dikirim")}</span>}</span>
       </div>
       {rows.length ? (
         <ul className="pay-list">
@@ -96,11 +100,12 @@ function PayInfo({ payment, total, onToast, onZoom }: { payment: StorePayment; t
 }
 
 /** After checkout: the order is recorded; the buyer still has to send the WhatsApp message, then pay. */
-export function Done({ order, shop, whatsapp, payment, onNew, onWa, onToast, onZoom }: Props) {
+export function Done({ order, shop, whatsapp, payment, onNew, onWa, onToast, onZoom, onReturns }: Props) {
   const items = order.items || [];
   const shown = items.slice(0, 4);
   const more = items.length - shown.length;
   const wa = localPhone(whatsapp);
+  const sh = order.shipping;
   const hasPay = !!payment && !!(payment.banks.length || payment.wallets.length || payment.qris || payment.note);
   return (
     <div className="done-wrap">
@@ -122,15 +127,22 @@ export function Done({ order, shop, whatsapp, payment, onNew, onWa, onToast, onZ
             </ul>
           ) : null}
           <div className="calc">
-            {order.promo ? <>
+            {order.promo || sh ? <>
               {order.subtotal ? <div className="ln"><span className="k">{tr("Subtotal")}</span><span className="money">{rp(order.subtotal)}</span></div> : null}
-              <div className="ln promo-ln"><span className="k">{tr("Promo {name}", { name: order.promo.name })}</span><span className="money">−{rp(order.promo.amount)}</span></div>
+              {order.promo ? <div className="ln promo-ln"><span className="k">{tr("Promo {name}", { name: order.promo.name })}</span><span className="money">−{rp(order.promo.amount)}</span></div> : null}
             </> : null}
+            {sh ? (
+              <div className="ln" id="done-ongkir">
+                <span className="k">{tr("Ongkir")} <span className="ln-sub">{[`${sh.courierName || sh.courier.toUpperCase()} ${sh.service}`, fmtEtd(sh.etd)].filter(Boolean).join(" · ")}{sh.destinationLabel ? <><br />{tr("ke {label}", { label: sh.destinationLabel })}</> : null}</span></span>
+                <span className={sh.cost === 0 ? "money free" : "money"}>{sh.cost === 0 ? (sh.free && sh.freeArea ? tr("Gratis (area {area})", { area: sh.freeArea }) : tr("Gratis")) : rp(sh.cost)}</span>
+              </div>
+            ) : null}
             <div className="ln tot"><span>{tr("Total")} <span className="small muted" style={{ fontWeight: 500 }}>{order.pcs} {tr("pcs")}{order.tier ? tr(" · harga grosir") : ""}</span></span><span className="money">{rp(order.total)}</span></div>
           </div>
           <ol className="next-steps">
             <li><b>{tr("Kirim pesan WhatsApp yang sudah terisi")}</b><span>{tr("Pesanan baru diproses setelah pesannya sampai ke toko.")}</span></li>
-            <li><b>{tr("Tunggu konfirmasi ongkir")}</b><span>{tr("Toko membalas dengan total akhir (kalau dikirim, plus ongkir).")}</span></li>
+            {sh ? <li><b>{tr("Tunggu konfirmasi toko")}</b><span>{tr("Toko mengecek pesanan dan membalas dengan total akhir.")}</span></li>
+              : <li><b>{tr("Tunggu konfirmasi ongkir")}</b><span>{tr("Toko membalas dengan total akhir (kalau dikirim, plus ongkir).")}</span></li>}
             <li><b>{hasPay ? tr("Transfer & kirim bukti") : tr("Bayar sesuai info dari toko")}</b><span>{hasPay ? tr("Pakai salah satu cara bayar di bawah, lalu kirim fotonya di chat yang sama.") : tr("Toko mengabari cara bayarnya lewat WhatsApp.")}</span></li>
           </ol>
           <a className="btn lg full wa-btn" id="wa-link" href={order.waUrl} rel="noopener" onClick={onWa}>
@@ -142,7 +154,8 @@ export function Done({ order, shop, whatsapp, payment, onNew, onWa, onToast, onZ
           ) : null}
         </div>
       </section>
-      {hasPay ? <section className="panel done-pay"><div className="panel-b"><PayInfo payment={payment!} total={order.total} onToast={onToast} onZoom={onZoom} /></div></section> : null}
+      {hasPay ? <section className="panel done-pay"><div className="panel-b"><PayInfo payment={payment!} total={order.total} shipped={!!sh} onToast={onToast} onZoom={onZoom} /></div></section> : null}
+      {onReturns ? <div className="done-ret"><ReturnsLink onOpen={onReturns}>{tr("Kebijakan retur / tukar")}</ReturnsLink></div> : null}
       <button className="btn full done-new" data-act="new-order" onClick={onNew}>{tr("Belanja lagi")}</button>
     </div>
   );

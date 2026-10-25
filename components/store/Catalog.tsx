@@ -1,6 +1,7 @@
 import type { StoreData } from "@/lib/pos";
 import { cover, normBrand, num, promoTerms, promoTitle, rp, sizeEntries, strikePct, tierHint, tiersOf, variantCover, wasPrice, type Browse, type Product, type Sort } from "@/lib/store";
 import { tr } from "@/lib/i18n";
+import { areaMin, areaNames, hasReturns, orderSteps, ReturnIcon, ReturnsBody, showFreeBadge, Truck } from "./Steps";
 
 /** via: name of the reseller whose link the buyer came through. browse: category / sort / filter, owned by the
  *  storefront so they survive a visit to the cart. */
@@ -72,6 +73,7 @@ export function Catalog({ data, query, via, onProduct, onClearQuery, browse, onB
   const heroWa = links.find((l) => l.k === "wa");
   const manySizes = sizes.length > SIZE_CHIPS_MAX;
   const deals = data.promos || [];
+  const freeShip = showFreeBadge(data.shipping);
 
   // Home rows: only on the plain home list (no search, category or filter), and only with enough products.
   const plain = !s && !cat && filter === "all";
@@ -119,8 +121,14 @@ export function Catalog({ data, query, via, onProduct, onClearQuery, browse, onB
           </div>
         ) : null}
       </section>
-      {Number.isFinite(minPcs) || deals.length ? (
+      {Number.isFinite(minPcs) || deals.length || freeShip ? (
         <div className="deals" role="list" aria-label={tr("Promo")}>
+          {freeShip ? (
+            <div className="deal ship-deal" role="listitem" id="free-ship">
+              <i className="deal-ic" aria-hidden="true"><Truck /></i>
+              <div><b>{tr("Gratis ongkir area {areas}", { areas: areaNames(data.shipping) })}</b><span>{areaMin(data.shipping) || tr("Untuk pesanan yang dikirim ke area ini.")}</span></div>
+            </div>
+          ) : null}
           {deals.slice(0, 3).map((p, i) => {
             const terms = promoTerms(p);
             return (
@@ -270,20 +278,37 @@ function shopLinks(data: StoreData) {
 }
 
 /** How to shop + the shop's card. Rendered below every view and pushed to the bottom of short pages. */
+/** Icons for the shop's own order steps, in turn (the step number sits on each). */
+const stepIcons = () => [Tag, Bag, Chat, PayCard, Truck, Check];
+
 export function ShopFooter({ data }: { data: StoreData }) {
   const brand = normBrand(data.brand);
   const links = shopLinks(data);
+  const own = orderSteps(data);
+  const priced = data.shipping?.provider === "rajaongkir";
   return (
-    <footer className="shop-foot">
+    <footer className={hasReturns(data) ? "shop-foot has-ret" : "shop-foot"}>
       <section className="foot-how" aria-labelledby="foot-how-h">
         <h3 id="foot-how-h">{tr("Cara belanja")}</h3>
-        <ol className="steps">
-          <li><i><Tag /></i><div><b>{tr("Pilih baju")}</b><span>{tr("Pilih variasi dan ukuran, lalu masukkan keranjang.")}</span></div></li>
-          <li><i><Bag /></i><div><b>{tr("Ambil atau dikirim")}</b><span>{tr("Isi nama dan WhatsApp, pilih ambil di toko atau dikirim.")}</span></div></li>
-          <li><i><Chat /></i><div><b>{tr("Kirim lewat WhatsApp")}</b><span>{tr("Pesan sudah terisi, tinggal tekan kirim.")}</span></div></li>
+        <ol className={own.length ? `steps n${Math.min(own.length, 6)}` : "steps"}>
+          {own.length ? own.map((st, i) => {
+            const icons = stepIcons(), Icon = icons[i % icons.length];
+            return <li key={i}><i><Icon /></i><div><b>{st.title}</b>{st.text ? <span>{st.text}</span> : null}</div></li>;
+          }) : <>
+            <li><i><Tag /></i><div><b>{tr("Pilih baju")}</b><span>{tr("Pilih variasi dan ukuran, lalu masukkan keranjang.")}</span></div></li>
+            <li><i><Bag /></i><div><b>{tr("Ambil atau dikirim")}</b><span>{tr("Isi nama dan WhatsApp, pilih ambil di toko atau dikirim.")}</span></div></li>
+            <li><i><Chat /></i><div><b>{tr("Kirim lewat WhatsApp")}</b><span>{tr("Pesan sudah terisi, tinggal tekan kirim.")}</span></div></li>
+          </>}
         </ol>
-        <p className="fine">{tr("Harga grosir dihitung dari total pcs di keranjang, boleh campur model. Ongkir dikabari toko lewat WhatsApp.")}</p>
+        <p className="fine">{priced ? tr("Harga grosir dihitung dari total pcs di keranjang, boleh campur model. Ongkir dihitung di keranjang sesuai kurir yang kamu pilih.")
+          : tr("Harga grosir dihitung dari total pcs di keranjang, boleh campur model. Ongkir dikabari toko lewat WhatsApp.")}</p>
       </section>
+      {hasReturns(data) ? (
+        <section className="foot-ret" id="cara-retur" aria-labelledby="foot-ret-h" tabIndex={-1}>
+          <h3 id="foot-ret-h"><ReturnIcon />{tr("Cara retur / tukar")}</h3>
+          <ReturnsBody data={data} />
+        </section>
+      ) : null}
       <section className="foot-shop" aria-label={data.shop}>
         <div className="foot-id">
           {brand.logo ? <img className="foot-logo" src={encodeURI(brand.logo)} alt="" width={36} height={36} loading="lazy" decoding="async" /> : null}
@@ -310,4 +335,6 @@ const Share = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V
 const Pct = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 5L5 19" /><circle cx="7" cy="7" r="2.5" /><circle cx="17" cy="17" r="2.5" /></svg>;
 const Stack = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" /></svg>;
 const Flame = () => <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1c.4 2 2.8 3 2.8 5.6A2.8 2.8 0 0 1 6 9.4 2.8 2.8 0 0 1 3.2 6.6C3.2 5 4.4 4.4 4.6 3c.7.6 1 1.3 1 2C6.4 4 6.3 2.4 6 1z" /></svg>;
+const PayCard = () => <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2.5" /><path d="M3 10h18M7 15h3" /></svg>;
+const Check = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
 const Tag = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8L3 12z" /><circle cx="7.5" cy="7.5" r="1.3" /></svg>;

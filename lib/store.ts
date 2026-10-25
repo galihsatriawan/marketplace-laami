@@ -1,5 +1,5 @@
 // Storefront logic shared by the browser components: types, money formatting, wholesale pricing, storage.
-import type { PublicPromo, StoreData } from "./pos";
+import type { OrderShipping, PublicPromo, StoreData } from "./pos";
 import { tr } from "@/lib/i18n";
 
 export type Product = StoreData["products"][number];
@@ -20,7 +20,9 @@ export interface DoneOrder { code: string; waUrl: string; total: number; pcs: nu
   /** What was ordered as the shop priced it, and the total before the promo (newer POS versions send them). */
   items?: { name: string; variant: string; size: string; qty: number; price: number }[]; subtotal?: number;
   /** The composed WhatsApp text, for copying when WhatsApp does not open. */
-  message?: string }
+  message?: string;
+  /** Courier, service and cost when the shop priced the shipping (RajaOngkir); absent = the shop tells the cost. */
+  shipping?: OrderShipping | null }
 /** How long a placed order's done view comes back after a reload (e.g. returning from WhatsApp). */
 export const DONE_TTL_MS = 30 * 60_000;
 /** Catalog browsing choices, kept while the buyer visits the cart so "Lanjut belanja" returns to the same list. */
