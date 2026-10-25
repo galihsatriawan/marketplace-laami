@@ -133,7 +133,7 @@ export function Done({ order, shop, whatsapp, payment, onNew, onWa, onToast, onZ
             </> : null}
             {sh ? (
               <div className="ln" id="done-ongkir">
-                <span className="k">{tr("Ongkir")} <span className="ln-sub">{[`${sh.courierName || sh.courier.toUpperCase()} ${sh.service}`, fmtEtd(sh.etd)].filter(Boolean).join(" · ")}{sh.destinationLabel ? <><br />{tr("ke {label}", { label: sh.destinationLabel })}</> : null}</span></span>
+                <span className="k">{tr("Ongkir")} <span className="ln-sub">{[`${sh.courierName || (sh.courier || "").toUpperCase()} ${sh.service || ""}`.trim(), fmtEtd(sh.etd)].filter(Boolean).join(" · ")}{sh.destinationLabel ? <>{sh.courier ? <br /> : null}{tr("ke {label}", { label: sh.destinationLabel })}</> : null}</span></span>
                 <span className={sh.cost === 0 ? "money free" : "money"}>{sh.cost === 0 ? (sh.free && sh.freeArea ? tr("Gratis (area {area})", { area: sh.freeArea }) : tr("Gratis")) : rp(sh.cost)}</span>
               </div>
             ) : null}

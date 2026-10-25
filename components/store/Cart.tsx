@@ -17,7 +17,8 @@ type Errors = Partial<Record<Field, string>>;
 export function checkoutErrors(b: Buyer, ship?: ShipCtx): Errors {
   const e: Errors = {};
   if (ship?.live && b.delivery === "ship") {
-    if (!ship.dest) e.dest = tr("Pilih kecamatan / kelurahan tujuan");
+    if (!ship.dest) { if (!ship.limited) e.dest = tr("Pilih kecamatan / kelurahan tujuan"); }
+    else if (!ship.quote && !ship.loading) e.courier = ship.stale ? tr("Berat paket berubah. Tekan Cek ulang untuk ongkir terbaru") : tr("Tekan Cek ongkir dulu");
     else if (ship.quote && ship.quote.options.length && !ship.option) e.courier = tr("Pilih kurir pengiriman");
   }
   if (!b.name.trim()) e.name = tr("Isi nama kamu dulu");
@@ -32,14 +33,19 @@ const ErrMsg = ({ errs, f }: { errs: Errors; f: Field }) => (errs[f] ? <span cla
 export type ShipCtx = {
   live: boolean; down: string; api: string; slug: string;
   dest: Destination | null; onDest: (d: Destination | null) => void;
+  /** The price for the destination at the cart's current weight (free / minimum spend worked out for this cart). */
   quote: ShipQuote | null; loading: boolean;
-  pick: ShipPick | null; onPick: (p: ShipPick) => void; onDown: (msg: string) => void;
+  /** No price for this weight yet but one for another: the parcel got heavier / lighter. */
+  stale: "up" | "down" | null; onCheck: () => void; recent: Destination[];
+  /** The shop's allowance is low: new destination searches may be refused, so a destination is optional (the shop tells the cost). */
+  limited?: boolean;
+  pick: ShipPick | null; onPick: (p: ShipPick) => void; onDown: (msg: string, retryMs?: number) => void;
   /** The picked option in the current quote (null when none / stale). */
   option: ShipQuote["options"][number] | null;
 };
 /** What the buyer pays for shipping right now; null = not known (the shop tells it). */
 export const shipCost = (s: ShipCtx | undefined, delivery: Delivery) =>
-  s?.live && delivery === "ship" && s.quote && s.option ? optCost(s.quote, s.option) : null;
+  !s?.live || delivery !== "ship" || !s.quote ? null : s.quote.free ? 0 : s.option ? optCost(s.quote, s.option) : null;
 type Props = {
   ship?: ShipCtx;
   data: StoreData; cart: CartLine[]; buyer: Buyer; busy: boolean;
@@ -86,7 +92,8 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
   const optsRef = useRef<HTMLDivElement>(null);
   // a destination or courier picked clears its error
   useEffect(() => { setErrs((e) => (e.dest && sc?.dest ? { ...e, dest: undefined } : e)); }, [sc?.dest]);
-  useEffect(() => { setErrs((e) => (e.courier && sc?.option ? { ...e, courier: undefined } : e)); }, [sc?.option]);
+  const courierOk = !!sc?.option || !!(sc?.quote && !sc.quote.options.length);
+  useEffect(() => { setErrs((e) => (e.courier && courierOk ? { ...e, courier: undefined } : e)); }, [courierOk]);
 
   if (!cart.length) {
     return (
@@ -206,14 +213,14 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
                     <b>{tr("Dikirim")}</b><span>{sc?.live ? tr("Pilih kurir, ongkir langsung dihitung") : tr("Ongkir dikabari toko")}</span></button>
                 </div></div>
               {ship && sc?.live ? (
-                <ShipBox api={sc.api} slug={sc.slug} dest={sc.dest} onDest={sc.onDest} quote={sc.quote} loading={sc.loading} pick={sc.pick} onPick={sc.onPick} onDown={sc.onDown}
+                <ShipBox api={sc.api} slug={sc.slug} dest={sc.dest} onDest={sc.onDest} quote={sc.quote} loading={sc.loading} stale={sc.stale} onCheck={sc.onCheck} recent={sc.recent} limited={sc.limited} pick={sc.pick} onPick={sc.onPick} onDown={sc.onDown}
                   err={{ dest: errs.dest, courier: errs.courier }} destRef={destRef} optsRef={optsRef} />
               ) : null}
               {ship ? (
                 <div className="f" id="co-addrbox"><label htmlFor="co-addr">{sc?.live ? tr("Alamat (jalan, no. rumah)") : tr("Alamat lengkap")}</label>
                   <textarea ref={addrRef} className="in" id="co-addr" name="address" rows={sc?.live ? 2 : 3} maxLength={500} autoComplete="street-address"
                     placeholder={sc?.live ? tr("Nama jalan, nomor rumah, RT/RW, patokan") : tr("Jalan, RT/RW, kelurahan, kecamatan, kota, kode pos")} value={buyer.address} onChange={(e) => edit({ address: e.target.value })} {...errProps(errs, "address")} />
-                  {errs.address ? <ErrMsg errs={errs} f="address" /> : sc?.live ? null : <span className="hint">{tr("Ongkir dikabari toko lewat WhatsApp.")}</span>}
+                  {errs.address ? <ErrMsg errs={errs} f="address" /> : sc?.live || sc?.down ? null : <span className="hint">{tr("Ongkir dikabari toko lewat WhatsApp.")}</span>}
                   {sc?.down ? <div className="ship-down" id="co-ship-down" role="status"><Truck /><span><b>{tr("Ongkir dikabari toko")}</b>{tr("{why} Pesananmu tetap bisa dikirim, toko mengabari ongkirnya lewat WhatsApp.", { why: sc.down })}</span></div>
                     : !sc?.live && freeAreas(data.shipping).length ? <div className="ship-free" id="co-free-note"><Truck /><span>{tr("Gratis ongkir untuk area {areas} (dikonfirmasi toko)", { areas: areaNames(data.shipping) })}</span></div> : null}</div>
               ) : (
@@ -251,7 +258,7 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
                 {save > 0 ? <div className="ln"><span className="k">{tr("Hemat harga grosir")}</span><span className="money" style={{ color: "var(--hue)" }}>−{rp(save)}</span></div> : null}
                 {promo ? <div className={flash ? "ln promo-ln flash" : "ln promo-ln"} key={`promo-${flash}`} id="co-promo"><span className="k">{tr("Promo {name}", { name: promo.name })}{promo.code ? <span className="code-tag">{promo.code}</span> : null}</span><span className="money">−{rp(promo.amount)}</span></div> : null}
                 <div className="ln" id="co-ongkir"><span className="k">{tr("Ongkir")}{ongkir !== null && sc?.option ? <span className="ln-sub"> · {sc.option.courierName || sc.option.courier.toUpperCase()} {sc.option.service}{fmtEtd(sc.option.etd) ? ` (${fmtEtd(sc.option.etd)})` : ""}</span> : null}</span>
-                  <span className={ongkir === 0 ? "money free" : "money"}>{!ship ? tr("tidak ada") : ongkir === 0 ? tr("Gratis") : ongkir !== null ? rp(ongkir) : sc?.live ? (sc.dest ? tr("pilih kurir") : tr("pilih tujuan")) : tr("dikabari toko")}</span></div>
+                  <span className={ongkir === 0 ? "money free" : "money"}>{!ship ? tr("tidak ada") : ongkir === 0 ? tr("Gratis") : ongkir !== null ? rp(ongkir) : sc?.live ? (!sc.dest ? (sc.limited ? tr("dikabari toko") : tr("pilih tujuan")) : !sc.quote ? (sc.loading ? tr("menghitung…") : tr("cek ongkir")) : sc.quote.options.length ? tr("pilih kurir") : tr("dikabari toko")) : tr("dikabari toko")}</span></div>
                 <div className="ln tot"><span>{tr("Total")}</span><span className="money" id="co-total">{rp(pay)}</span></div>
                 {save + off > 0 ? <div className="ln saved"><span>{tr("Kamu hemat {rp}", { rp: rp(save + off) })}</span></div> : null}
               </div>

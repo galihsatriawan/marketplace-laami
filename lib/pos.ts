@@ -36,6 +36,8 @@ export interface StoreData {
     strike?: number; tiers: { min: number; price: number }[];
     /** Product description as HTML the POS already sanitized (p br strong b em i ul ol li h3 a); "" or absent when none. */
     description?: string;
+    /** v2: grams per pcs for the shipping weight; absent = the storefront assumes DEFAULT_WEIGHT_G. */
+    weight?: number;
     variants: { id: string; name: string; media: { url: string; type: "image" | "video" }[]; stock: Record<string, number> }[] }[];
 }
 /** The shop's payment methods as the public catalog lists them; account numbers are the shop's own, published on purpose. */
@@ -50,13 +52,19 @@ export interface Step { title: string; text: string }
 export interface StoreSteps { order: Step[]; returns: Step[]; returnNote: string }
 /** A free-shipping area ("Gratis ongkir area Sumberpucung"); minSpend 0 = any order. */
 export interface FreeArea { name: string; minSpend: number }
-export interface StoreShipping { provider: "manual" | "rajaongkir"; freeAreas: FreeArea[]; badge: boolean }
+/** How much of the shop's daily RajaOngkir allowance is left: "out" = no live ongkir today (the shop tells it on WhatsApp). */
+export type ShipQuota = "ok" | "low" | "out";
+export interface StoreShipping { provider: "manual" | "rajaongkir"; freeAreas: FreeArea[]; badge: boolean;
+  /** Older POS versions send none (= "ok"). */
+  quota?: ShipQuota }
 /** A place a parcel can go, from the shop's destination search. free: inside one of the shop's free-shipping areas. */
 export interface Destination { id: number | string; label: string; district?: string; city?: string; province?: string; zip?: string; free?: boolean }
 /** One courier service with its price for this cart. */
 export interface ShipOption { courier: string; courierName: string; service: string; description: string; cost: number; etd: string }
 /** The shop's shipping price for a cart to one destination. free: the order ships free (minSpend met). */
-export interface ShipQuote { weight: number; free: boolean; freeArea?: string; minSpendLeft?: number; options: ShipOption[] }
+export interface ShipQuote { weight: number; free: boolean; freeArea?: string; minSpendLeft?: number; options: ShipOption[];
+  /** Newer POS: the parcel weight it priced (whole kg), the allowance left, and whether the price came from its cache. */
+  weightKg?: number; quota?: ShipQuota; cached?: boolean }
 /** Shipping as the shop priced it on a placed order. */
 export interface OrderShipping { destinationLabel: string; courier: string; courierName?: string; service: string; etd?: string; cost: number; free?: boolean; freeArea?: string }
 /** An automatic promo as the POS lists it: "some" = only some products or categories. */

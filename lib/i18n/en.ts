@@ -287,4 +287,25 @@ export const EN: Record<string, string> = {
   "Belum ada kurir ke tujuan ini. Ongkir dikabari toko lewat WhatsApp.": "No courier to this destination yet. The store tells you the shipping cost via WhatsApp.",
   "min. belanja mulai {rp}": "min. spend from {rp}",
   // ===== end Shipping & steps =====
+  // ===== Ongkir quota =====
+  "Cek ongkir sedang terlalu sering dipakai.": "The shipping check is being used too often right now.",
+  "Kuota cek ongkir toko hari ini sudah habis.": "The store's shipping checks for today are used up.",
+  "Cari": "Search",
+  "Tekan Cari atau Enter untuk mencari.": "Tap Search or press Enter.",
+  "Tujuan terakhir": "Recent destinations",
+  "Terakhir dipakai": "Used recently",
+  "Gratis ongkir (area {area})": "Free shipping ({area} area)",
+  "Belanja {rp} lagi untuk gratis ongkir": "Spend {rp} more for free shipping",
+  "Ongkir berubah karena berat paket naik": "Shipping changed because the parcel got heavier",
+  "Ongkir berubah karena berat paket turun": "Shipping changed because the parcel got lighter",
+  "Cek ongkir ke tujuan ini dulu.": "Check the shipping cost to this destination first.",
+  "Cek ulang": "Check again",
+  "Cek ongkir": "Check shipping",
+  "cek ongkir": "check shipping",
+  "menghitung…": "calculating…",
+  "Berat paket berubah. Tekan Cek ulang untuk ongkir terbaru": "The parcel weight changed. Tap Check again for the latest shipping cost",
+  "Tekan Cek ongkir dulu": "Tap Check shipping first",
+  "Pencarian tujuan sedang tidak tersedia. Pilih tujuan terakhir, atau lanjut pesan: ongkir dikabari toko lewat WhatsApp.": "Destination search is unavailable right now. Pick a recent destination, or just order: the store tells you the shipping cost via WhatsApp.",
+  "Pencarian tujuan terbatas hari ini. Pilih tujuan terakhir kalau ada, atau ketik kecamatan.": "Destination search is limited today. Pick a recent destination if you have one, or type a district.",
+  // ===== end Ongkir quota =====
 };
