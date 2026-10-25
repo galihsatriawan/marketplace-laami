@@ -3,7 +3,7 @@
 // Public storefront: catalog -> cart -> checkout. The order goes to the POS (re-priced and checked there) and the
 // buyer sends the composed message to the shop's WhatsApp. Laid out like a modern marketplace: search in the header, grid catalog, dialog product page.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import type { Quote, StoreData } from "@/lib/pos";
+import { storeQuery, type Quote, type StoreData } from "@/lib/pos";
 import {
   applyBrandColor, BROWSE0, cartBase, cartKey, codeKey, DONE_TTL_MS, FETCH_TIMEOUT_MS, ORDER_TIMEOUT_MS, productPath, REF_DAYS, refKey, cartPcs, cartTotal, clampCart,
   doneKey, findProduct, loadBuyer, local, mediaOf, normBrand, rp, saveBuyer, session, sheetState, uid, unitPrice, variantOf, variantStock,
@@ -11,12 +11,15 @@ import {
 } from "@/lib/store";
 import { Mark } from "./Mark";
 import { Cart, type Checkout } from "./store/Cart";
-import { Catalog, ShopFooter } from "./store/Catalog";
+import { Catalog, featured, isSoldOut, ShopFooter } from "./store/Catalog";
 import { Done } from "./store/Done";
 import { ProductSheet } from "./store/ProductSheet";
 import { Viewer } from "./store/Viewer";
 import { tr } from "@/lib/i18n";
 import { LangSwitch } from "@/lib/i18n/LangSwitch";
+
+/** Products listed in a shared catalog message. */
+const SHARE_MAX = 10;
 
 type SheetState = { pick: SheetPick; closing: boolean; key: number };
 type ViewerState = { productId: string; variantId?: string; start: number };
@@ -113,8 +116,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   const refresh = useCallback(async () => {
     try {
       // keep the reseller's link: their held stock is part of what this buyer may order
-      const q = refCode.current ? `?ref=${encodeURIComponent(refCode.current)}` : "";
-      const r = await fetch(`${api}/api/public/stores/${slug}${q}`, { cache: "no-store", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      const r = await fetch(`${api}/api/public/stores/${slug}${storeQuery(refCode.current)}`, { cache: "no-store", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       if (r.status === 404) { setClosed(true); return; }
       if (!r.ok) return;
       const next = (await r.json()) as StoreData;
@@ -211,6 +213,38 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     } catch (e) { if ((e as Error).name === "AbortError") return; }
     try { await navigator.clipboard.writeText(url); showToast(tr("Link produk disalin")); } catch { showToast(url); }
   };
+
+  /** Shares the catalog: a WhatsApp-friendly list of in-stock products, each linked through this store's home path
+   *  (so a reseller's /r/<code> stays in every link). Falls back to a wa.me message the buyer sends themself. */
+  const shareCatalog = async () => {
+    const root = location.origin + (home || "");
+    const ps = featured(data).slice(0, SHARE_MAX);
+    const lines = ps.map((p) => `• ${p.name} — ${rp(p.price)}\n  ${location.origin}${productPath(home, p)}`);
+    const more = data.products.filter((p) => !isSoldOut(p)).length - ps.length;
+    const text = [
+      ref ? tr("Katalog {shop} (lewat {name}):", { shop: data.shop, name: ref.name }) : tr("Katalog {shop}:", { shop: data.shop }),
+      ...lines,
+      more > 0 ? tr("…dan {n} produk lain.", { n: more }) : "",
+      tr("Lihat semua & pesan di sini:"),
+    ].filter(Boolean).join("\n");
+    const title = tr("Katalog {shop}", { shop: data.shop });
+    if (typeof window !== "undefined") (window as unknown as { __lastShare?: unknown }).__lastShare = { title, text, url: root || "/" };
+    try {
+      if (navigator.share) { await navigator.share({ title, text, url: root || location.origin }); return; }
+    } catch (e) { if ((e as Error).name === "AbortError") return; }
+    window.open(`https://wa.me/?text=${encodeURIComponent(`${text}\n${root || location.origin}`)}`, "_blank", "noopener");
+  };
+
+  // The header's height, for the sticky category tabs right under it.
+  useEffect(() => {
+    const top = document.getElementById("top");
+    if (!top || typeof ResizeObserver === "undefined") return;
+    const set = () => document.documentElement.style.setProperty("--top-h", `${Math.round(top.getBoundingClientRect().height)}px`);
+    const ro = new ResizeObserver(set);
+    ro.observe(top);
+    set();
+    return () => ro.disconnect();
+  }, []);
 
   // A /p/<product> link opens that product once the page is ready.
   const opened = useRef(false);
@@ -338,7 +372,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     const save = cartBase(data, cart) - cartTotal(data, cart);
     content = (
       <>
-        <Catalog data={data} query={query} via={ref?.name} onProduct={openProduct} onClearQuery={() => setQuery("")} browse={browse} onBrowse={setBrowse} />
+        <Catalog data={data} query={query} via={ref?.name} onProduct={openProduct} onClearQuery={() => setQuery("")} browse={browse} onBrowse={setBrowse} onShare={() => void shareCatalog()} />
         {cart.length ? (
           <div className="cartbar">
             <div>

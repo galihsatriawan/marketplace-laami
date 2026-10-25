@@ -17,7 +17,15 @@ export interface StoreData {
   ref?: { code: string; name: string } | null;
   /** Automatic promos running today (codes are never listed); older POS versions send none. */
   promos?: PublicPromo[];
+  /** Catalog shape the POS sent (2 when asked with ?v=2); older POS versions send none. */
+  v?: number;
+  /** v2: sold-out products and 0-stock sizes are listed (shown crossed out, never orderable). */
+  showSoldOut?: boolean;
   products: { id: string; slug?: string; name: string; category?: string; subcategory?: string; price: number;
+    /** v2 badges: arrived recently (or marked new), among the shop's bestsellers (rank 1 = top), nothing left. */
+    isNew?: boolean; bestseller?: boolean; bestsellerRank?: number; soldOut?: boolean;
+    /** v2: plain-text summary of the description (at most 160 chars), for meta tags and structured data. */
+    descriptionText?: string;
     /** Struck-through price ("harga coret") shown next to `price`; display only, buyers pay `price`. Only sent when higher. */
     strike?: number; tiers: { min: number; price: number }[];
     variants: { id: string; name: string; media: { url: string; type: "image" | "video" }[]; stock: Record<string, number> }[] }[];
@@ -35,6 +43,10 @@ export type StoreResult = { ok: true; data: StoreData } | { ok: false; status: n
 /** How long a server render waits for the POS before showing "shop unavailable" (503). */
 export const POS_TIMEOUT_MS = 8000;
 
+/** Query string for the public catalog: always the v2 shape (badges, sold-out products), plus a valid reseller code. */
+export const storeQuery = (ref?: string | null) =>
+  `?v=2${ref && /^[a-z0-9-]{1,40}$/i.test(ref) ? `&ref=${encodeURIComponent(ref.toLowerCase())}` : ""}`;
+
 /** Loads a shop's public catalog from the POS. 404 when the shop is unknown or switched off; 503 when the POS
  *  is unset, answers with an error, or does not answer within POS_TIMEOUT_MS. */
 export async function getStore(slug: string, ref?: string): Promise<StoreResult> {
@@ -42,8 +54,7 @@ export async function getStore(slug: string, ref?: string): Promise<StoreResult>
   if (!SLUG_RE.test(s)) return { ok: false, status: 404 };
   if (!posUrl()) return { ok: false, status: 503 };
   try {
-    const q = ref && /^[a-z0-9-]{1,40}$/i.test(ref) ? `?ref=${encodeURIComponent(ref.toLowerCase())}` : "";
-    const r = await fetch(`${posUrl()}/api/public/stores/${s}${q}`, { cache: "no-store", headers: { accept: "application/json" }, signal: AbortSignal.timeout(POS_TIMEOUT_MS) });
+    const r = await fetch(`${posUrl()}/api/public/stores/${s}${storeQuery(ref)}`, { cache: "no-store", headers: { accept: "application/json" }, signal: AbortSignal.timeout(POS_TIMEOUT_MS) });
     if (!r.ok) {
       if (r.status !== 404) console.error("POS answered", r.status, `${posUrl()}/api/public/stores/${s}`);
       return { ok: false, status: r.status === 404 ? 404 : 503 };
