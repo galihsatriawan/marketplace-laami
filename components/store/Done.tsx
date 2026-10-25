@@ -106,6 +106,9 @@ export function Done({ order, shop, whatsapp, payment, onNew, onWa, onToast, onZ
   const more = items.length - shown.length;
   const wa = localPhone(whatsapp);
   const sh = order.shipping;
+  // ongkir subsidy as the shop gave it: taken off a priced ongkir, or "up to" when the shop tells the cost
+  const subOff = sh && Number(sh.subsidy) > 0 ? Math.min(Number(sh.subsidy), Math.max(0, Number(sh.cost) || 0)) : 0;
+  const subUpTo = !sh && Number(order.shippingSubsidyMax) > 0 ? Number(order.shippingSubsidyMax) : 0;
   const hasPay = !!payment && !!(payment.banks.length || payment.wallets.length || payment.qris || payment.note);
   return (
     <div className="done-wrap">
@@ -127,7 +130,7 @@ export function Done({ order, shop, whatsapp, payment, onNew, onWa, onToast, onZ
             </ul>
           ) : null}
           <div className="calc">
-            {order.promo || sh ? <>
+            {order.promo || sh || subUpTo ? <>
               {order.subtotal ? <div className="ln"><span className="k">{tr("Subtotal")}</span><span className="money">{rp(order.subtotal)}</span></div> : null}
               {order.promo ? <div className="ln promo-ln"><span className="k">{tr("Promo {name}", { name: order.promo.name })}</span><span className="money">−{rp(order.promo.amount)}</span></div> : null}
             </> : null}
@@ -137,7 +140,10 @@ export function Done({ order, shop, whatsapp, payment, onNew, onWa, onToast, onZ
                 <span className={sh.cost === 0 ? "money free" : "money"}>{sh.cost === 0 ? (sh.free && sh.freeArea ? tr("Gratis (area {area})", { area: sh.freeArea }) : tr("Gratis")) : rp(sh.cost)}</span>
               </div>
             ) : null}
+            {subOff ? <div className="ln sub-ln" id="done-sub"><span className="k">{tr("Potongan ongkir")}</span><span className="money">−{rp(subOff)}</span></div>
+              : subUpTo ? <div className="ln sub-ln" id="done-sub"><span className="k">{tr("Dapat potongan ongkir s/d {rp} (dikonfirmasi toko)", { rp: rp(subUpTo) })}</span></div> : null}
             <div className="ln tot"><span>{tr("Total")} <span className="small muted" style={{ fontWeight: 500 }}>{order.pcs} {tr("pcs")}{order.tier ? tr(" · harga grosir") : ""}</span></span><span className="money">{rp(order.total)}</span></div>
+            {subOff ? <div className="ln saved sub-got" id="done-sub-got"><span>{subOff >= sh!.cost ? tr("Ongkirmu gratis berkat potongan ongkir") : tr("Kamu dapat potongan ongkir {rp}", { rp: rp(subOff) })}</span></div> : null}
           </div>
           <ol className="next-steps">
             <li><b>{tr("Kirim pesan WhatsApp yang sudah terisi")}</b><span>{tr("Pesanan baru diproses setelah pesannya sampai ke toko.")}</span></li>

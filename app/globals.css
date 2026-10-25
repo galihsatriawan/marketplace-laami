@@ -856,3 +856,12 @@ h1.pd-name{font-size:clamp(22px,3.2vw,30px);line-height:1.2}
 .ship-check.stale{background:var(--pill-warn-bg);color:var(--pill-warn-ink);font-weight:650}
 .ship-free small{display:block;margin-top:2px;font-size:12.5px;font-weight:500;color:var(--muted)}
 /* ===== end Ongkir quota ===== */
+
+/* ===== Ongkir subsidy ===== */
+.so-was{display:inline-flex;align-items:baseline;gap:6px;white-space:nowrap}
+.so-c .so-save{font-size:11.5px;line-height:15px;font-weight:700;color:var(--positive)}
+.calc .ln.sub-ln .money{color:var(--positive)}
+.calc .ln.sub-ln .k{min-width:0}
+.calc .ln.sub-ln .ln-sub{white-space:nowrap}
+.sub-note{background:var(--raised);color:var(--text)}
+/* ===== end Ongkir subsidy ===== */

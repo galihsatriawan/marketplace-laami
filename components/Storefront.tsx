@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { storeQuery, type Destination, type OrderShipping, type Quote, type ShipQuote, type StoreData } from "@/lib/pos";
 import {
-  applyBrandColor, BROWSE0, cartBase, cartKey, codeKey, DONE_TTL_MS, FETCH_TIMEOUT_MS, ORDER_TIMEOUT_MS, productPath, REF_DAYS, refKey, cartPcs, cartTotal, clampCart,
+  applyBrandColor, BROWSE0, cartBase, cartSubsidy, cartKey, codeKey, DONE_TTL_MS, FETCH_TIMEOUT_MS, ORDER_TIMEOUT_MS, productPath, REF_DAYS, refKey, cartPcs, cartTotal, clampCart,
   doneKey, findProduct, loadBuyer, local, mediaOf, normBrand, rp, saveBuyer, session, sheetState, uid, unitPrice, variantOf, variantStock,
   type Browse, type Buyer, type CartLine, type DoneOrder, type Media, type Ref, type SheetPick, type View,
 } from "@/lib/store";
@@ -44,6 +44,16 @@ function withFree(q: ShipQuote, data: StoreData, goods: number): ShipQuote {
   const { minSpendLeft: _, ...rest } = q;
   return { ...rest, free: left === 0, ...(left > 0 ? { minSpendLeft: left } : {}) };
 }
+/** Puts the ongkir subsidy on a price: `subsidy` = the most it takes off, each option's `pay` = cost − min(subsidy, cost).
+ *  The shop's own figures are kept while the cart has the subsidy it had when asked; else (qty changed) the local one
+ *  counts, except that a shop that gave none for a subsidised cart (e.g. a reseller's stock) keeps giving none. */
+function withSubsidy(q: ShipQuote, local: number): ShipQuote {
+  const server = typeof q.subsidy === "number" && Number.isFinite(q.subsidy) ? Math.max(0, q.subsidy) : null;
+  const same = server !== null && q.askedSub === local;
+  const sub = same ? server! : server === 0 && (q.askedSub || 0) > 0 ? 0 : local;
+  if (!sub && server === null) return q;
+  return { ...q, subsidy: sub, options: q.options.map((o) => ({ ...o, pay: same && typeof o.pay === "number" ? Math.max(0, o.pay) : Math.max(0, o.cost - Math.min(sub, o.cost)) })) };
+}
 /** Products listed in a shared catalog message. */
 const SHARE_MAX = 10;
 
@@ -54,7 +64,9 @@ type ViewerState = { productId: string; variantId?: string; start: number; media
 type ToastAction = { label: string; run?: () => void; href?: string };
 type ToastState = { msg: string; key: number; action?: ToastAction };
 type OrderReply = { code?: string; waUrl?: string; message?: string; total?: number; subtotal?: number; pcs?: number; tier?: boolean; promo?: { name: string; amount: number } | null; error?: string;
-  items?: { name: string; variant: string; size: string; qty: number; price: number }[]; shipping?: OrderShipping | null };
+  items?: { name: string; variant: string; size: string; qty: number; price: number }[]; shipping?: OrderShipping | null;
+  /** Manual ongkir: the most the shop's subsidy takes off (it confirms the amount). */
+  shippingSubsidyMax?: number };
 
 type Props = {
   data: StoreData; api: string;
@@ -377,7 +389,9 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   const cachedShip = (cache: ShipCache, id: Destination["id"], w: number) =>
     cache[shipKeyOf(id, w)]?.q ?? Object.entries(cache).find(([k, v]) => k.startsWith(`${id}|`) && v.q.freeArea && !v.q.options.length)?.[1].q ?? null;
   const rawShip = dest ? cachedShip(shipCache, dest.id, kg) : null;
-  const shipQuote = rawShip ? withFree(rawShip, data, goods) : null;
+  // ongkir subsidy: worked out here from the catalog (no request when the qty changes); the shop's figures win while they fit
+  const subNow = cartSubsidy(data, cart, true);
+  const shipQuote = rawShip ? withSubsidy(withFree(rawShip, data, goods), subNow.max) : null;
   // no price for this weight, but one for another: the parcel got heavier or lighter since
   const lastOther = dest && !rawShip ? Object.entries(shipCache).filter(([k]) => k.startsWith(`${dest.id}|`)).sort((a, b) => b[1].at - a[1].at)[0] : undefined;
   const shipStale: "up" | "down" | null = lastOther ? (Number(lastOther[0].split("|").pop()) < kg ? "up" : "down") : null;
@@ -406,8 +420,9 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
       if (quota) { downFor(quota.why, quota.retryMs); return; }
       const j = (await r.json().catch(() => null)) as ShipQuote | null;
       if (!r.ok || !j || !Array.isArray(j.options)) throw new Error(String(r.status));
+      const asked = { ...j, askedSub: cartSubsidy(data, cartRef.current, true).max };
       setShipCache((c) => {
-        const next = Object.fromEntries([...Object.entries(c).filter(([x]) => x !== k).sort((a, b) => a[1].at - b[1].at).slice(-(SHIP_CACHE_MAX - 1)), [k, { q: j, at: Date.now() }]]);
+        const next = Object.fromEntries([...Object.entries(c).filter(([x]) => x !== k).sort((a, b) => a[1].at - b[1].at).slice(-(SHIP_CACHE_MAX - 1)), [k, { q: asked, at: Date.now() }]]);
         session.set(shipCacheKey(slug), next);
         return next;
       });
@@ -497,7 +512,8 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
       at: Date.now(), home: homeRef.current || "/",
       ...(Array.isArray(reply.items) ? { items: reply.items.slice(0, 50).map(({ name, variant, size, qty, price }) => ({ name, variant, size, qty, price })) } : {}),
       ...(typeof reply.subtotal === "number" ? { subtotal: reply.subtotal } : {}), ...(reply.message ? { message: reply.message } : {}),
-      ...(reply.shipping && typeof reply.shipping.cost === "number" ? { shipping: reply.shipping } : {}) };
+      ...(reply.shipping && typeof reply.shipping.cost === "number" ? { shipping: reply.shipping } : {}),
+      ...(!reply.shipping && Number(reply.shippingSubsidyMax) > 0 ? { shippingSubsidyMax: Number(reply.shippingSubsidyMax) } : {}) };
     // the shop priced it with its latest prices and promo; say so when that differs from what the cart showed
     const shown = cartTotal(data, cart) - (quote && quote.subtotal === cartTotal(data, cart) && quote.promo ? quote.promo.amount : 0) + (reply.shipping ? shipCost(shipCtx, buyer.delivery) || 0 : 0);
     if (reply.total !== undefined && reply.total !== shown) showToast(tr("Harga sudah diperbarui toko. Total pesananmu {total}.", { total: rp(reply.total) }));

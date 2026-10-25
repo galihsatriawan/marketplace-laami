@@ -308,4 +308,13 @@ export const EN: Record<string, string> = {
   "Pencarian tujuan sedang tidak tersedia. Pilih tujuan terakhir, atau lanjut pesan: ongkir dikabari toko lewat WhatsApp.": "Destination search is unavailable right now. Pick a recent destination, or just order: the store tells you the shipping cost via WhatsApp.",
   "Pencarian tujuan terbatas hari ini. Pilih tujuan terakhir kalau ada, atau ketik kecamatan.": "Destination search is limited today. Pick a recent destination if you have one, or type a district.",
   // ===== end Ongkir quota =====
+  // ===== Ongkir subsidy =====
+  "Potongan ongkir": "Shipping discount",
+  "Dapat potongan ongkir s/d {rp}": "Shipping discount up to {rp}",
+  "{pcs} pcs × {rp}": "{pcs} pcs × {rp}",
+  "Dapat potongan ongkir s/d {rp} (dikonfirmasi toko)": "Shipping discount up to {rp} (confirmed by the store)",
+  "Ongkirmu gratis berkat potongan ongkir": "Your shipping is free thanks to the shipping discount",
+  "Kamu dapat potongan ongkir {rp}": "You get a {rp} shipping discount",
+  "Tambah {n} pcs lagi untuk potongan ongkir": "Add {n} more pcs for a shipping discount",
+  // ===== end Ongkir subsidy =====
 };

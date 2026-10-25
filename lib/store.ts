@@ -22,7 +22,9 @@ export interface DoneOrder { code: string; waUrl: string; total: number; pcs: nu
   /** The composed WhatsApp text, for copying when WhatsApp does not open. */
   message?: string;
   /** Courier, service and cost when the shop priced the shipping (RajaOngkir); absent = the shop tells the cost. */
-  shipping?: OrderShipping | null }
+  shipping?: OrderShipping | null;
+  /** Manual ongkir: the most the shop's subsidy takes off (the shop confirms it); absent / 0 = none. */
+  shippingSubsidyMax?: number }
 /** How long a placed order's done view comes back after a reload (e.g. returning from WhatsApp). */
 export const DONE_TTL_MS = 30 * 60_000;
 /** Catalog browsing choices, kept while the buyer visits the cart so "Lanjut belanja" returns to the same list. */
@@ -184,4 +186,33 @@ export function promoTerms(p: PublicPromo) {
     p.oncePerBuyer ? tr("1× per pembeli") : "",
     p.end ? tr("s/d {date}", { date: shortDate(p.end) }) : "",
   ].filter(Boolean).join(" · ");
+}
+
+/** The shop's ongkir subsidy when it is on (an older POS sends none). */
+export function subsidyCfg(d: StoreData) {
+  const s = d.shipping?.subsidy;
+  if (!s || typeof s !== "object") return null;
+  // the shop sends null when no product has a subsidy; perPcs may be 0 while some products have their own rate
+  return { perPcs: Math.max(0, num(s.perPcs)), maxPerOrder: num(s.maxPerOrder), minPcs: Math.max(1, num(s.minPcs) || 1), resellerLinks: s.resellerLinks !== false };
+}
+/** Rp per pcs this product takes off the ongkir (its own rate, else the shop's default). */
+export function productSubsidy(d: StoreData, p: Product | undefined) {
+  const c = subsidyCfg(d);
+  if (!c || !p) return 0;
+  return typeof p.shipSubsidy === "number" && Number.isFinite(p.shipSubsidy) ? Math.max(0, p.shipSubsidy) : c.perPcs;
+}
+/** The subsidy for this cart worked out here (no request): the most it takes off a shipped order's ongkir, and the pcs
+ *  still missing for it ("left" > 0 while below the shop's minimum). The shop's own figures win when it sends them. */
+export function cartSubsidy(d: StoreData, cart: CartLine[], ship: boolean) {
+  const c = subsidyCfg(d);
+  const none = { max: 0, left: 0, rate: 0 };
+  if (!c || !ship || (d.ref && !c.resellerLinks)) return none;
+  const pcs = cartPcs(cart);
+  const sum = cart.reduce((a, l) => a + productSubsidy(d, findProduct(d, l.productId)) * num(l.qty), 0);
+  if (sum <= 0) return none;
+  if (pcs < c.minPcs) return { max: 0, left: c.minPcs - pcs, rate: 0 };
+  const max = c.maxPerOrder > 0 ? Math.min(sum, c.maxPerOrder) : sum;
+  // "3 pcs × Rp2.000" only reads true when every pcs has the same rate and no cap cut it
+  const rates = new Set(cart.map((l) => productSubsidy(d, findProduct(d, l.productId))));
+  return { max, left: 0, rate: rates.size === 1 && max === sum ? [...rates][0] : 0 };
 }
