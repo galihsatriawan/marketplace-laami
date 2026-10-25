@@ -84,11 +84,11 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
               const u = unitPrice(p, pcs);
               return (
                 <li className="li" key={`${c.productId}|${c.variantId}|${c.size}`}>
-                  {img ? <img className="thumb" src={img} alt="" /> : <span className="thumb" aria-hidden="true" />}
+                  {img ? <img className="thumb" src={img} alt="" width={72} height={90} loading="lazy" decoding="async" /> : <span className="thumb" aria-hidden="true" />}
                   <div className="grow">
                     <div className="t">{p.name}</div>
                     <div className="s">{v.name ? `${v.name} · ` : ""}{tr("Ukuran")} {c.size}</div>
-                    <div className="s">{wasPrice(p, u) ? <span className="was">{rp(wasPrice(p, u))}</span> : null}{rp(u)}{tr("/pcs")}</div>
+                    <div className="s unit">{wasPrice(p, u) ? <span className="was">{rp(wasPrice(p, u))}</span> : null}<span className="nw">{rp(u)}{tr("/pcs")}</span></div>
                     <div className="stepper sm">
                       <button type="button" className="btn sm" data-act="cart-dec" data-id={i} aria-label={tr("Kurangi")} onClick={() => onQty(i, c.qty - 1)}>−</button>
                       <span className="num">{c.qty}</span>

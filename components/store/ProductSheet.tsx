@@ -37,7 +37,7 @@ export function ProductSheet({ state, closing, onClose, onVariant, onSize, onQty
     </button>
   );
   return (
-    <Sheet title={p.name} closing={closing} onClose={onClose} foot={foot} wide={media.length > 0}>
+    <Sheet title={p.name} closing={closing} onClose={onClose} foot={foot} wide={media.length > 0} returnFocus>
       <div className="pd">
         {media.length ? (
           <div className="pd-media">
@@ -46,7 +46,8 @@ export function ProductSheet({ state, closing, onClose, onVariant, onSize, onQty
                 <button key={`${i}-${m.url}`} type="button" className="g-item" data-act="view" data-id={i} aria-label={tr("Lihat layar penuh")} onClick={() => onView(i)}>
                   {m.type === "video"
                     ? <><video src={`${m.url}#t=0.1`} muted playsInline preload="metadata" /><span className="g-play" aria-hidden="true" /></>
-                    : <img src={m.url} alt="" />}
+                    : <img src={m.url} alt={tr("{name}{v} foto {n}", { name: p.name, v: v.name ? " " + v.name : "", n: i + 1 })}
+                        loading={i ? "lazy" : "eager"} decoding="async" width={400} height={500} />}
                 </button>
               ))}
             </div>
@@ -54,7 +55,7 @@ export function ProductSheet({ state, closing, onClose, onVariant, onSize, onQty
               <div className="g-thumbs">
                 {media.map((m, i) => (
                   <button key={`${i}-${m.url}`} type="button" aria-label={tr("Foto {v}", { v: i + 1 })} aria-current={i === at} onClick={() => show(i)}>
-                    {m.type === "video" ? <video src={`${m.url}#t=0.1`} muted playsInline preload="metadata" /> : <img src={m.url} alt="" />}
+                    {m.type === "video" ? <video src={`${m.url}#t=0.1`} muted playsInline preload="metadata" /> : <img src={m.url} alt="" width={60} height={75} loading="lazy" decoding="async" />}
                   </button>
                 ))}
               </div>
@@ -87,7 +88,7 @@ export function ProductSheet({ state, closing, onClose, onVariant, onSize, onQty
                 const c = variantCover(x);
                 return (
                   <button key={x.id} type="button" className="chip var-chip" data-act="ps-var" data-id={x.id} aria-pressed={x.id === v.id} onClick={() => onVariant(x.id)}>
-                    {c ? <img src={c} alt="" /> : null}{x.name || tr("Lainnya")}
+                    {c ? <img src={c} alt="" width={28} height={28} loading="lazy" decoding="async" /> : null}{x.name || tr("Lainnya")}
                   </button>
                 );
               })}

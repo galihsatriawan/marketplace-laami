@@ -14,7 +14,7 @@
   --pill-warn-bg:#fff6dd; --pill-warn-ink:#8a3c0c;
   --pill-neu-bg:#eef0ed; --pill-neu-ink:#3a3f3b;
   --scrim:rgba(17,20,18,.36); --lift:0 18px 48px rgba(17,20,18,.16);
-  --font:"Manrope",Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font:var(--font-manrope,"Manrope"),Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
   --r-card:20px; --r-inner:12px; --r-control:12px; --r-chip:8px;
   --gap:14px; --pad:20px; --ctl:44px;
   --fs-title:28px; --fs-section:17px; --fs-hero:36px; --fs-kpi:22px; --fs-body:15px; --fs-small:13px;
@@ -59,6 +59,12 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .small{font-size:var(--fs-small);line-height:19px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
+/* sticky footer: header, the view, then the footer pushed to the bottom of short pages */
+.page{min-height:100dvh;display:flex;flex-direction:column}
+.page > main{flex:none;width:100%}
+.page > .state{flex:1;min-height:0}
+.page > .foot-wrap{margin-top:auto;width:100%}
+.page.has-bar{padding-bottom:84px}
 .wrap{max-width:var(--max);margin:0 auto;padding:16px var(--gutter-r) 0 var(--gutter);display:flex;flex-direction:column;gap:18px}
 .wrap.enter > :not(.cartbar){animation:rise .42s var(--ease) both}
 .wrap.enter > *:nth-child(2){animation-delay:.04s}.wrap.enter > *:nth-child(3){animation-delay:.08s}.wrap.enter > *:nth-child(n+4){animation-delay:.12s}
@@ -148,6 +154,8 @@ h1,h2,h3{margin:0;text-wrap:balance}
 @media (min-width:1100px){.hero-band{padding:44px 48px}.hero-shots{height:340px}}
 /* a single photo would be a thin wide strip below the two-column hero: the catalog right below already shows it */
 @media (max-width:899px){.hero-shots.n1{display:none}}
+/* a single photo takes the second column only where it is shown (has-shot1, see Catalog.tsx) */
+@media (min-width:900px){.hero-band.has-shot1{grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr)}}
 @media (max-width:640px){
   .hero-band{padding:20px 18px;gap:16px;border-radius:22px}
   .hero-band p{font-size:15px;line-height:22px}
@@ -221,6 +229,7 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .swatches{display:flex;flex:none}
 .swatches img,.swatches span{width:18px;height:18px;border-radius:50%;object-fit:cover;border:2px solid var(--surface);margin-left:-5px;background:var(--active);display:grid;place-items:center;font-size:9px;font-weight:700;color:var(--muted)}
 .swatches > :first-child{margin-left:0}
+.swatches .more{width:auto;min-width:18px;padding:0 4px;border-radius:9px;font-size:9.5px}
 @media (min-width:640px){.cat-body{padding:12px 14px 14px}.cat-name{font-size:14.5px}.cat-price .now{font-size:18px}}
 
 .empty{padding:28px 20px;border:1px dashed var(--control);border-radius:18px;color:var(--muted);text-align:center;background:var(--surface)}
@@ -261,13 +270,15 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .cartbar .btn{background:var(--surface);color:var(--text);border-color:var(--surface)}
 @keyframes barIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 @media (min-width:1024px){.cartbar{left:auto;right:max(24px,calc((100% - var(--max)) / 2 + 16px));margin:0;min-width:360px}}
-.has-bar{padding-bottom:84px}
 
 /* buttons, inputs */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:var(--ctl);padding:0 18px;border-radius:999px;border:1px solid var(--control);background:var(--surface);cursor:pointer;font-weight:700;white-space:nowrap;text-decoration:none;color:var(--text);transition:transform .15s var(--ease),background .2s,opacity .2s}
 .btn:hover{background:var(--raised)}
 .btn:active{transform:scale(.97)}
 .btn.pri{background:var(--hue);color:#fff;border-color:var(--hue)}
+/* in dark mode the accent is lightened, so primary buttons take dark text (as .hl-main) */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.pri{color:#0c0d0c}}
+:root[data-theme="dark"] .btn.pri{color:#0c0d0c}
 .btn.pri:hover{opacity:.9;background:var(--hue)}
 .btn.dark{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
 .btn.ghost{border-color:transparent;background:transparent;padding:0 10px}
@@ -332,6 +343,8 @@ textarea.in{height:auto;min-height:80px;padding:10px 12px;resize:vertical}
 .li .grow{flex:1;min-width:0}
 .li .t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .li .s{color:var(--muted);font-size:13.5px;line-height:19px;margin-top:2px;overflow-wrap:anywhere}
+.li .s.unit{overflow-wrap:normal}
+.li .s .nw{white-space:nowrap}
 .li .r{text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
 .li .r .v{font-weight:800}
 .thumb{width:72px;height:90px;border-radius:12px;object-fit:cover;flex:none;background:var(--raised)}
@@ -357,7 +370,9 @@ textarea.in{height:auto;min-height:80px;padding:10px 12px;resize:vertical}
 @keyframes fadeout{from{opacity:1}to{opacity:0}}
 .sheet-h{position:sticky;top:0;background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 0 12px;z-index:2}
 .sheet-h::before{content:"";position:absolute;left:50%;top:8px;width:40px;height:4px;border-radius:2px;background:var(--control);transform:translateX(-50%)}
-.sheet-h h2{font-size:19px;font-weight:800;letter-spacing:-.01em;margin-top:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* long product names get two lines, then an ellipsis */
+.sheet-h h2{font-size:19px;line-height:24px;font-weight:800;letter-spacing:-.01em;margin-top:14px;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+@media (max-width:640px){.sheet-h h2{font-size:17px;line-height:22px}}
 .sheet-h .btn{margin-top:14px}
 .sheet-f{position:sticky;bottom:calc(-16px - env(safe-area-inset-bottom,0px));background:var(--surface);padding:12px 0 calc(16px + env(safe-area-inset-bottom,0px));margin-bottom:calc(-16px - env(safe-area-inset-bottom,0px));display:flex;gap:8px;border-top:1px solid var(--rule);z-index:2}
 .sheet-f .btn{flex:1}
@@ -412,9 +427,17 @@ textarea.in{height:auto;min-height:80px;padding:10px 12px;resize:vertical}
 .wa-btn{background:#1f9d55;border-color:#1f9d55;color:#fff!important}
 .wa-btn:hover{opacity:.92;background:#1f9d55}
 .state{min-height:70dvh;display:grid;place-items:center;text-align:center;padding-inline:var(--gutter)}
-.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--primary);color:var(--on-primary);padding:11px 18px;border-radius:999px;box-shadow:var(--lift);max-width:calc(100% - 32px);font-weight:600;animation:toast .35s var(--ease) both;transform:translateX(-50%)}
+/* short, at most two lines, above the cart bar (and above the sheet's footer while a sheet is open) */
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:30;display:flex;align-items:center;gap:12px;background:var(--primary);color:var(--on-primary);
+  padding:10px 16px;border-radius:16px;box-shadow:var(--lift);width:max-content;max-width:min(440px,calc(100% - 32px));font-size:14px;line-height:19px;font-weight:600;animation:toast .35s var(--ease) both;transform:translateX(-50%)}
+.toast-msg{min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.toast.has-act{padding-right:6px}
+.toast-act{flex:none;min-height:36px;padding:0 12px;border:0;border-radius:10px;background:color-mix(in srgb,var(--on-primary) 16%,transparent);color:inherit;font:inherit;font-weight:800;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;position:relative}
+.toast-act::after{content:"";position:absolute;inset:-4px -2px}
+body:has(.scrim) .toast{bottom:calc(96px + env(safe-area-inset-bottom,0px))}
 @keyframes toast{from{opacity:0;transform:translate(-50%,12px)}to{opacity:1;transform:translate(-50%,0)}}
 @media (min-width:1024px){.toast{bottom:96px}}
+@media (min-width:768px){body:has(.scrim) .toast{bottom:24px}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}}
 
 /* full-screen media viewer */
@@ -444,3 +467,20 @@ textarea.in{height:auto;min-height:80px;padding:10px 12px;resize:vertical}
 .lang-switch{display:inline-flex;background:var(--surface);border:1px solid var(--control);border-radius:999px;padding:3px;gap:2px;flex:none}
 .lang-switch button{border:0;background:transparent;height:30px;padding:0 10px;border-radius:999px;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer}
 .lang-switch button[aria-pressed="true"]{background:var(--primary);color:var(--on-primary)}
+
+/* collapsed size filter (many sizes): one chip-shaped select */
+.fchip.fpick{position:relative;display:inline-flex;align-items:center;padding:0}
+.fchip.fpick select{appearance:none;border:0;background:transparent;height:100%;padding:0 30px 0 14px;font:inherit;font-weight:600;color:inherit;cursor:pointer;border-radius:999px;
+  background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 17px) 15px,calc(100% - 12px) 15px;background-size:5px 5px;background-repeat:no-repeat}
+.fchip.fpick.on{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
+.fchip.fpick select option{color:var(--text);background:var(--surface)}
+
+/* tap targets: small-looking controls get a 44px hit area (an invisible ::after), so the layout stays compact */
+.fchip,.hl,.foot-links a,.back,.link,.lang-switch button,.share-btn{position:relative}
+.fchip::after,.hl::after,.foot-links a::after,.back::after,.link::after,.lang-switch button::after,.share-btn::after{content:"";position:absolute;left:50%;top:50%;width:max(100%,44px);height:max(100%,44px);transform:translate(-50%,-50%)}
+.fchip.fpick::after{pointer-events:none}
+/* the chip rows scroll sideways (which clips): room above and below for the larger hit area */
+.filters{padding-block:5px;margin-block:-3px}
+.sort{height:44px;background-position:calc(100% - 18px) 20px,calc(100% - 13px) 20px}
+.back{min-height:44px}
+.lang-switch button{min-width:40px}

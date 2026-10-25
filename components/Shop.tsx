@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import { getStore, posUrl, type StoreData, type StoreResult } from "@/lib/pos";
-import { Mark } from "./Mark";
 import { Storefront } from "./Storefront";
+import { Unavailable } from "./Unavailable";
 import { tr } from "@/lib/i18n";
 import { serverLang } from "@/lib/i18n/server";
 
@@ -33,7 +33,7 @@ const rpText = (n: number) => `Rp${Math.round(n).toLocaleString("id-ID")}`;
 export async function shopMetadata(route: ShopRoute): Promise<Metadata> {
   await serverLang();
   const r = await load(route);
-  if (!r.ok) return { title: tr("Toko tidak ditemukan") };
+  if (!r.ok) return { title: r.status === 404 ? tr("Toko tidak ditemukan") : tr("Toko sedang tidak bisa dibuka"), robots: { index: false } };
   const d = r.data;
   const p = findBySlug(d, route.product);
   if (p) {
@@ -47,25 +47,17 @@ export async function shopMetadata(route: ShopRoute): Promise<Metadata> {
   return { title: d.shop, description, icons: shopIcons(d), openGraph: { title: d.shop, description, siteName: d.shop, type: "website", images: d.brand.logo ? [{ url: d.brand.logo }] : undefined } };
 }
 
-/** One shop's storefront, or a friendly message when it cannot be opened. */
+/** One shop's storefront. An unknown shop, product or reseller link is a 404 (see the not-found pages); a POS that
+ *  cannot be reached shows the "unavailable" card (proxy.ts already turns that into a 503 in the usual case). */
 export async function ShopPage({ route }: { route: ShopRoute }) {
   await serverLang();
   const r = await load(route);
   if (!r.ok) {
-    // A product or reseller path under an unknown store is a plain 404; the store's own page explains itself.
-    if (route.slug && (route.product || route.ref) && r.status === 404) notFound();
-    return (
-      <main className="wrap state">
-        <section className="panel" style={{ maxWidth: 420, width: "100%" }}>
-          <div className="panel-b" style={{ padding: 28, display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
-            <Mark />
-            <h1 style={{ fontSize: 22 }}>{r.status === 404 ? tr("Toko tidak ditemukan") : tr("Toko sedang tidak bisa dibuka")}</h1>
-            <p className="muted" style={{ margin: 0 }}>{r.status === 404 ? tr("Cek lagi link tokonya, atau mungkin tokonya sedang tutup.") : tr("Coba muat ulang sebentar lagi.")}</p>
-          </div>
-        </section>
-      </main>
-    );
+    if (r.status === 404) notFound();
+    return <Unavailable />;
   }
+  if (route.product && !findBySlug(r.data, route.product)) notFound();
+  if (route.ref && !r.data.ref) notFound();
   const slug = slugOf(route);
   return <Storefront data={r.data} api={posUrl()} base={baseOf(slug)} initialProduct={findBySlug(r.data, route.product)?.id} />;
 }
