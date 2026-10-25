@@ -1,7 +1,8 @@
 import { rp, type DoneOrder } from "@/lib/store";
 import { tr } from "@/lib/i18n";
 
-export function Done({ order, shop, onNew }: { order: DoneOrder; shop: string; onNew: () => void }) {
+/** onWa: the buyer tapped through to WhatsApp (the order no longer needs to come back on reload). */
+export function Done({ order, shop, onNew, onWa }: { order: DoneOrder; shop: string; onNew: () => void; onWa: () => void }) {
   return (
     <section className="panel done">
       <div className="panel-b">
@@ -13,7 +14,7 @@ export function Done({ order, shop, onNew }: { order: DoneOrder; shop: string; o
           <div className="ln"><span className="k">{order.pcs} {tr("pcs")}{order.tier ? tr(" · harga grosir") : ""}</span><span className="money">{rp(order.total)}</span></div>
         </div>
         <p style={{ margin: 0 }} className="muted">{tr("Satu langkah lagi: kirim pesanannya ke WhatsApp {shop}. Kalau WhatsApp belum terbuka, tekan tombol di bawah.", { shop })}</p>
-        <a className="btn lg full wa-btn" id="wa-link" href={order.waUrl} rel="noopener">{tr("Buka WhatsApp & kirim pesanan")}</a>
+        <a className="btn lg full wa-btn" id="wa-link" href={order.waUrl} rel="noopener" onClick={onWa}>{tr("Buka WhatsApp & kirim pesanan")}</a>
         <button className="btn full" data-act="new-order" onClick={onNew}>{tr("Belanja lagi")}</button>
       </div>
     </section>

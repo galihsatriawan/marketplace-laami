@@ -13,7 +13,18 @@ export type Delivery = "pickup" | "ship";
 export interface CartLine { productId: string; variantId: string; size: string; qty: number }
 export interface Buyer { name: string; phone: string; address: string; delivery: Delivery; note: string }
 /** The last placed order, kept for this browser tab so the "done" view survives the jump to WhatsApp. */
-export interface DoneOrder { code: string; waUrl: string; total: number; pcs: number; tier: boolean; promo?: { name: string; amount: number } | null }
+export interface DoneOrder { code: string; waUrl: string; total: number; pcs: number; tier: boolean; promo?: { name: string; amount: number } | null;
+  /** When it was placed (ms) and the store path it was placed on: the done view only comes back there, and not for long. */
+  at?: number; home?: string }
+/** How long a placed order's done view comes back after a reload (e.g. returning from WhatsApp). */
+export const DONE_TTL_MS = 30 * 60_000;
+/** Catalog browsing choices, kept while the buyer visits the cart so "Lanjut belanja" returns to the same list. */
+export type Sort = "rec" | "low" | "high" | "name";
+export interface Browse { filter: string; sort: Sort; cat: string; sub: string }
+export const BROWSE0: Browse = { filter: "all", sort: "rec", cat: "", sub: "" };
+/** Browser-side request timeouts (ms): catalog refresh and price quote, and placing an order. */
+export const FETCH_TIMEOUT_MS = 10_000;
+export const ORDER_TIMEOUT_MS = 20_000;
 /** Product sheet selection. size is the buyer's pick; the sheet falls back to an in-stock size. */
 export interface SheetPick { productId: string; variantId: string; size?: string; qty: number }
 

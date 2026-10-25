@@ -32,21 +32,25 @@ export interface Quote { pcs: number; subtotal: number; total: number; tier: boo
   /** The reason as a template + values, for tr(). */ errorTpl?: string; errorVars?: Record<string, string | number> }
 export type StoreResult = { ok: true; data: StoreData } | { ok: false; status: number };
 
-/** Loads a shop's public catalog from the POS. 404 when the shop is unknown or switched off. */
+/** How long a server render waits for the POS before showing "shop unavailable" (503). */
+export const POS_TIMEOUT_MS = 8000;
+
+/** Loads a shop's public catalog from the POS. 404 when the shop is unknown or switched off; 503 when the POS
+ *  is unset, answers with an error, or does not answer within POS_TIMEOUT_MS. */
 export async function getStore(slug: string, ref?: string): Promise<StoreResult> {
   const s = String(slug || "").toLowerCase();
   if (!SLUG_RE.test(s)) return { ok: false, status: 404 };
   if (!posUrl()) return { ok: false, status: 503 };
   try {
     const q = ref && /^[a-z0-9-]{1,40}$/i.test(ref) ? `?ref=${encodeURIComponent(ref.toLowerCase())}` : "";
-    const r = await fetch(`${posUrl()}/api/public/stores/${s}${q}`, { cache: "no-store", headers: { accept: "application/json" } });
+    const r = await fetch(`${posUrl()}/api/public/stores/${s}${q}`, { cache: "no-store", headers: { accept: "application/json" }, signal: AbortSignal.timeout(POS_TIMEOUT_MS) });
     if (!r.ok) {
       if (r.status !== 404) console.error("POS answered", r.status, `${posUrl()}/api/public/stores/${s}`);
       return { ok: false, status: r.status === 404 ? 404 : 503 };
     }
     return { ok: true, data: (await r.json()) as StoreData };
   } catch (e) {
-    console.error("POS unreachable", posUrl(), e);
+    console.error((e as Error)?.name === "TimeoutError" ? `POS did not answer within ${POS_TIMEOUT_MS} ms` : "POS unreachable", posUrl(), e);
     return { ok: false, status: 503 };
   }
 }

@@ -1,8 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
+import localFont from "next/font/local";
 import "./globals.css";
 import { isLang, LANG_COOKIE } from "@/lib/i18n";
 import { LangProvider } from "@/lib/i18n/LangProvider";
+
+// Manrope (variable, latin subset, SIL OFL: fonts/OFL.txt) served with the app: no render-blocking Google Fonts request.
+const manrope = localFont({ src: "./fonts/manrope-latin.woff2", weight: "200 800", display: "swap", variable: "--font-manrope",
+  fallback: ["system-ui", "-apple-system", "Segoe UI", "sans-serif"] });
 
 export const metadata: Metadata = {
   title: "Toko online",
@@ -25,13 +30,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const c = (await cookies()).get(LANG_COOKIE)?.value;
   const lang = isLang(c) ? c : "id";
   return (
-    <html lang={lang}>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" />
-      </head>
+    <html lang={lang} className={manrope.variable}>
       <body><LangProvider lang={lang}>{children}</LangProvider></body>
     </html>
   );
