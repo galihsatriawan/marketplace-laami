@@ -1,19 +1,25 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { flushSync } from "react-dom";
-import type { Quote, StoreData } from "@/lib/pos";
+import type { Destination, Quote, ShipQuote, StoreData } from "@/lib/pos";
 import { tr } from "@/lib/i18n";
 import { rpShort } from "./ProductSheet";
+import { fmtEtd, optCost, ShipBox, type ShipPick } from "./Shipping";
+import { areaNames, freeAreas, Truck } from "./Steps";
 import {
   cartBase, cartPcs, cartTotal, cover, findProduct, nextTier, normBrand, num, rp, unitPrice, variantCover, wasPrice, variantOf,
   type Buyer, type CartLine, type Delivery, type View,
 } from "@/lib/store";
 
 export type Checkout = { name: string; phone: string; address: string };
-type Field = "name" | "phone" | "address";
+type Field = "name" | "phone" | "address" | "dest" | "courier";
 type Errors = Partial<Record<Field, string>>;
 /** What is wrong with the checkout form, field by field (empty when it can be sent). */
-export function checkoutErrors(b: Buyer): Errors {
+export function checkoutErrors(b: Buyer, ship?: ShipCtx): Errors {
   const e: Errors = {};
+  if (ship?.live && b.delivery === "ship") {
+    if (!ship.dest) e.dest = tr("Pilih kecamatan / kelurahan tujuan");
+    else if (ship.quote && ship.quote.options.length && !ship.option) e.courier = tr("Pilih kurir pengiriman");
+  }
   if (!b.name.trim()) e.name = tr("Isi nama kamu dulu");
   if (b.phone.replace(/\D/g, "").length < 9) e.phone = b.phone.trim() ? tr("Nomor WhatsApp belum benar. Contoh: 0812 3456 7890") : tr("Isi nomor WhatsApp yang aktif");
   if (b.delivery === "ship" && b.address.trim().length < 10) e.address = tr("Isi alamat lengkap untuk pengiriman");
@@ -22,7 +28,20 @@ export function checkoutErrors(b: Buyer): Errors {
 /** Props for an input with an inline error under it. */
 const errProps = (errs: Errors, f: Field) => (errs[f] ? { "aria-invalid": true as const, "aria-describedby": `co-${f}-err` } : {});
 const ErrMsg = ({ errs, f }: { errs: Errors; f: Field }) => (errs[f] ? <span className="f-err" id={`co-${f}-err`} role="alert">{errs[f]}</span> : null);
+/** Live shipping prices at checkout (the shop uses RajaOngkir). live: on and working; down: why it fell back. */
+export type ShipCtx = {
+  live: boolean; down: string; api: string; slug: string;
+  dest: Destination | null; onDest: (d: Destination | null) => void;
+  quote: ShipQuote | null; loading: boolean;
+  pick: ShipPick | null; onPick: (p: ShipPick) => void; onDown: (msg: string) => void;
+  /** The picked option in the current quote (null when none / stale). */
+  option: ShipQuote["options"][number] | null;
+};
+/** What the buyer pays for shipping right now; null = not known (the shop tells it). */
+export const shipCost = (s: ShipCtx | undefined, delivery: Delivery) =>
+  s?.live && delivery === "ship" && s.quote && s.option ? optCost(s.quote, s.option) : null;
 type Props = {
+  ship?: ShipCtx;
   data: StoreData; cart: CartLine[]; buyer: Buyer; busy: boolean;
   onGo: (v: View) => void; onQty: (index: number, qty: number) => void; onClear: () => void;
   onBuyer: (patch: Partial<Buyer>) => void; onToast: (msg: string) => void; onPlace: (c: Checkout) => void;
@@ -36,7 +55,7 @@ const Back = ({ onGo }: { onGo: (v: View) => void }) => (
   </button>
 );
 
-export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, onToast, onPlace, code, quote, onCode }: Props) {
+export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, onToast, onPlace, code, quote, onCode, ship: sc }: Props) {
   const [typed, setTyped] = useState(code);
   // the promo code field stays folded behind "Punya kode promo?" until the buyer wants it
   const [promoOpen, setPromoOpen] = useState(!!code);
@@ -63,6 +82,11 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
   const nameRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const addrRef = useRef<HTMLTextAreaElement>(null);
+  const destRef = useRef<HTMLInputElement>(null);
+  const optsRef = useRef<HTMLDivElement>(null);
+  // a destination or courier picked clears its error
+  useEffect(() => { setErrs((e) => (e.dest && sc?.dest ? { ...e, dest: undefined } : e)); }, [sc?.dest]);
+  useEffect(() => { setErrs((e) => (e.courier && sc?.option ? { ...e, courier: undefined } : e)); }, [sc?.option]);
 
   if (!cart.length) {
     return (
@@ -81,7 +105,9 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
   // the shop's promo counts only while its quote is for these very prices
   const fresh = !!quote && quote.subtotal === total;
   const promo = fresh ? quote!.promo : null;
-  const pay = total - (promo?.amount || 0);
+  const ship = buyer.delivery === "ship";
+  const ongkir = shipCost(sc, buyer.delivery);
+  const pay = total - (promo?.amount || 0) + (ongkir || 0);
   const off = promo?.amount || 0;
   useEffect(() => {
     if (off && off !== lastOff.current) setFlash((n) => n + 1);
@@ -93,11 +119,10 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
     onBuyer(patch);
     const f = Object.keys(patch)[0] as Field;
     if (errs[f]) {
-      const next = checkoutErrors({ ...buyer, ...patch });
+      const next = checkoutErrors({ ...buyer, ...patch }, sc);
       setErrs((e) => ({ ...e, [f]: next[f] }));
     }
   };
-  const ship = buyer.delivery === "ship";
   const pickupAt = normBrand(data.brand).address;
 
   const setDelivery = (d: Delivery) => {
@@ -109,12 +134,12 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
     e.preventDefault();
     if (busy) return;
     const name = buyer.name.trim(), phone = buyer.phone.replace(/[^\d+]/g, ""), address = buyer.address.trim();
-    const e2 = checkoutErrors(buyer);
+    const e2 = checkoutErrors(buyer, sc);
     setErrs(e2);
-    const first = (["name", "phone", "address"] as Field[]).find((f) => e2[f]);
+    const first = (["name", "phone", "dest", "address", "courier"] as Field[]).find((f) => e2[f]);
     if (first) {
       onToast(e2[first]!);
-      const el = { name: nameRef, phone: phoneRef, address: addrRef }[first].current;
+      const el = { name: nameRef, phone: phoneRef, address: addrRef, dest: destRef, courier: optsRef }[first].current;
       el?.focus({ preventScroll: true });
       el?.scrollIntoView({ block: "center", behavior: "smooth" });
       return;
@@ -178,13 +203,19 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
                   <button type="button" data-act="delivery" data-id="pickup" aria-pressed={!ship} onClick={() => setDelivery("pickup")}>
                     <b>{tr("Diambil di toko")}</b><span>{tr("Tanpa ongkir")}</span></button>
                   <button type="button" data-act="delivery" data-id="ship" aria-pressed={ship} onClick={() => setDelivery("ship")}>
-                    <b>{tr("Dikirim")}</b><span>{tr("Ongkir dikabari toko")}</span></button>
+                    <b>{tr("Dikirim")}</b><span>{sc?.live ? tr("Pilih kurir, ongkir langsung dihitung") : tr("Ongkir dikabari toko")}</span></button>
                 </div></div>
+              {ship && sc?.live ? (
+                <ShipBox api={sc.api} slug={sc.slug} dest={sc.dest} onDest={sc.onDest} quote={sc.quote} loading={sc.loading} pick={sc.pick} onPick={sc.onPick} onDown={sc.onDown}
+                  err={{ dest: errs.dest, courier: errs.courier }} destRef={destRef} optsRef={optsRef} />
+              ) : null}
               {ship ? (
-                <div className="f" id="co-addrbox"><label htmlFor="co-addr">{tr("Alamat lengkap")}</label>
-                  <textarea ref={addrRef} className="in" id="co-addr" name="address" rows={3} maxLength={500} autoComplete="street-address"
-                    placeholder={tr("Jalan, RT/RW, kelurahan, kecamatan, kota, kode pos")} value={buyer.address} onChange={(e) => edit({ address: e.target.value })} {...errProps(errs, "address")} />
-                  {errs.address ? <ErrMsg errs={errs} f="address" /> : <span className="hint">{tr("Ongkir dikabari toko lewat WhatsApp.")}</span>}</div>
+                <div className="f" id="co-addrbox"><label htmlFor="co-addr">{sc?.live ? tr("Alamat (jalan, no. rumah)") : tr("Alamat lengkap")}</label>
+                  <textarea ref={addrRef} className="in" id="co-addr" name="address" rows={sc?.live ? 2 : 3} maxLength={500} autoComplete="street-address"
+                    placeholder={sc?.live ? tr("Nama jalan, nomor rumah, RT/RW, patokan") : tr("Jalan, RT/RW, kelurahan, kecamatan, kota, kode pos")} value={buyer.address} onChange={(e) => edit({ address: e.target.value })} {...errProps(errs, "address")} />
+                  {errs.address ? <ErrMsg errs={errs} f="address" /> : sc?.live ? null : <span className="hint">{tr("Ongkir dikabari toko lewat WhatsApp.")}</span>}
+                  {sc?.down ? <div className="ship-down" id="co-ship-down" role="status"><Truck /><span><b>{tr("Ongkir dikabari toko")}</b>{tr("{why} Pesananmu tetap bisa dikirim, toko mengabari ongkirnya lewat WhatsApp.", { why: sc.down })}</span></div>
+                    : !sc?.live && freeAreas(data.shipping).length ? <div className="ship-free" id="co-free-note"><Truck /><span>{tr("Gratis ongkir untuk area {areas} (dikonfirmasi toko)", { areas: areaNames(data.shipping) })}</span></div> : null}</div>
               ) : (
                 <div className="pickup-box">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>
@@ -219,12 +250,12 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
                 <div className="ln"><span className="k">{tr("Subtotal {pcs} pcs", { pcs })}</span><span className="money">{rp(base)}</span></div>
                 {save > 0 ? <div className="ln"><span className="k">{tr("Hemat harga grosir")}</span><span className="money" style={{ color: "var(--hue)" }}>−{rp(save)}</span></div> : null}
                 {promo ? <div className={flash ? "ln promo-ln flash" : "ln promo-ln"} key={`promo-${flash}`} id="co-promo"><span className="k">{tr("Promo {name}", { name: promo.name })}{promo.code ? <span className="code-tag">{promo.code}</span> : null}</span><span className="money">−{rp(promo.amount)}</span></div> : null}
-                <div className="ln"><span className="k">{tr("Ongkir")}</span><span>{ship ? tr("dikabari toko") : tr("tidak ada")}</span></div>
+                <div className="ln" id="co-ongkir"><span className="k">{tr("Ongkir")}{ongkir !== null && sc?.option ? <span className="ln-sub"> · {sc.option.courierName || sc.option.courier.toUpperCase()} {sc.option.service}{fmtEtd(sc.option.etd) ? ` (${fmtEtd(sc.option.etd)})` : ""}</span> : null}</span>
+                  <span className={ongkir === 0 ? "money free" : "money"}>{!ship ? tr("tidak ada") : ongkir === 0 ? tr("Gratis") : ongkir !== null ? rp(ongkir) : sc?.live ? (sc.dest ? tr("pilih kurir") : tr("pilih tujuan")) : tr("dikabari toko")}</span></div>
                 <div className="ln tot"><span>{tr("Total")}</span><span className="money" id="co-total">{rp(pay)}</span></div>
                 {save + off > 0 ? <div className="ln saved"><span>{tr("Kamu hemat {rp}", { rp: rp(save + off) })}</span></div> : null}
               </div>
               <button ref={submitRef} className="btn pri lg full" type="submit" disabled={busy}>{busy ? tr("Mengirim…") : tr("Pesan lewat WhatsApp")}</button>
-              <div className="small muted">{tr("Pesananmu tercatat di {shop}, lalu WhatsApp terbuka dengan pesan yang sudah terisi. Tinggal tekan kirim.", { shop: data.shop })}</div>
             </form>
           </div>
         </aside>

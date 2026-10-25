@@ -123,7 +123,7 @@ export function AddButton({ state, onAdd }: { state: State; onAdd: () => void })
 }
 
 /** Name, price, badges, choices and description: the same on the sheet and on the product page. */
-function Details({ state, heading, onVariant, onSize, onQty, onShare, foot }: Omit<Actions, "onView" | "onAdd"> & { state: State; heading: "h1" | "h2"; foot?: React.ReactNode }) {
+function Details({ state, heading, onVariant, onSize, onQty, onShare, foot, perks }: Omit<Actions, "onView" | "onAdd"> & { state: State; heading: "h1" | "h2"; foot?: React.ReactNode; perks?: React.ReactNode }) {
   const { p, v, sizes, size, have, inCart, max, qty, price } = state;
   const H = heading;
   return (
@@ -139,6 +139,7 @@ function Details({ state, heading, onVariant, onSize, onQty, onShare, foot }: Om
         </div>
         <Badges p={p} />
         <Tiers p={p} />
+        {perks}
       </div>
       {hasVariants(p) ? (
         <div className="f"><span className="lbl">{tr("Variasi")}{v.name ? <span className="muted" style={{ fontWeight: 500 }}> · {v.name}</span> : null}</span><div className="chips">
@@ -187,21 +188,21 @@ function Details({ state, heading, onVariant, onSize, onQty, onShare, foot }: Om
 const altOf = (state: State) => (i: number) => tr("{name}{v} foto {n}", { name: state.p.name, v: state.v.name ? " " + state.v.name : "", n: i + 1 });
 
 /** The product as a bottom sheet (phones) / two-column dialog (tablet up), opened from the catalog. */
-export function ProductSheet({ state, closing, onClose, onVariant, onSize, onQty, onView, onAdd, onShare }: Actions & { state: State; closing: boolean; onClose: () => void }) {
+export function ProductSheet({ state, closing, onClose, onVariant, onSize, onQty, onView, onAdd, onShare, perks }: Actions & { state: State; closing: boolean; onClose: () => void; perks?: React.ReactNode }) {
   const { p, v, media } = state;
   const share = <button type="button" className="btn sm ghost share-btn" data-act="share" onClick={onShare}><ShareIcon />{tr("Bagikan")}</button>;
   return (
     <Sheet title={p.name} bare lead={share} closing={closing} onClose={onClose} foot={<AddButton state={state} onAdd={onAdd} />} wide={media.length > 0} returnFocus>
       <div className="pd">
         <Gallery media={media} alt={altOf(state)} resetKey={v.id} onView={onView} />
-        <Details state={state} heading="h2" onVariant={onVariant} onSize={onSize} onQty={onQty} onShare={onShare} />
+        <Details state={state} heading="h2" onVariant={onVariant} onSize={onSize} onQty={onQty} onShare={onShare} perks={perks} />
       </div>
     </Sheet>
   );
 }
 
 /** The product on its own page (a /p/<product> link opened directly): gallery | details from tablet up. */
-export function ProductPage({ state, onBack, onVariant, onSize, onQty, onView, onAdd, onShare }: Actions & { state: State; onBack: () => void }) {
+export function ProductPage({ state, onBack, onVariant, onSize, onQty, onView, onAdd, onShare, perks }: Actions & { state: State; onBack: () => void; perks?: React.ReactNode }) {
   const { v, media } = state;
   return (
     <>
@@ -213,7 +214,7 @@ export function ProductPage({ state, onBack, onVariant, onSize, onQty, onView, o
       </div>
       <article className={media.length ? "pd pd-page" : "pd pd-page no-media"}>
         <Gallery media={media} alt={altOf(state)} resetKey={v.id} onView={onView} />
-        <Details state={state} heading="h1" onVariant={onVariant} onSize={onSize} onQty={onQty} onShare={onShare}
+        <Details state={state} heading="h1" onVariant={onVariant} onSize={onSize} onQty={onQty} onShare={onShare} perks={perks}
           foot={<div className="pd-buy"><AddButton state={state} onAdd={onAdd} /></div>} />
       </article>
     </>

@@ -3,14 +3,16 @@
 // Public storefront: catalog -> cart -> checkout. The order goes to the POS (re-priced and checked there) and the
 // buyer sends the composed message to the shop's WhatsApp. Laid out like a modern marketplace: search in the header, grid catalog, dialog product page.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { storeQuery, type Quote, type StoreData } from "@/lib/pos";
+import { storeQuery, type Destination, type OrderShipping, type Quote, type ShipQuote, type StoreData } from "@/lib/pos";
 import {
   applyBrandColor, BROWSE0, cartBase, cartKey, codeKey, DONE_TTL_MS, FETCH_TIMEOUT_MS, ORDER_TIMEOUT_MS, productPath, REF_DAYS, refKey, cartPcs, cartTotal, clampCart,
   doneKey, findProduct, loadBuyer, local, mediaOf, normBrand, rp, saveBuyer, session, sheetState, uid, unitPrice, variantOf, variantStock,
   type Browse, type Buyer, type CartLine, type DoneOrder, type Media, type Ref, type SheetPick, type View,
 } from "@/lib/store";
 import { Mark } from "./Mark";
-import { Cart, type Checkout } from "./store/Cart";
+import { Cart, shipCost, type Checkout, type ShipCtx } from "./store/Cart";
+import { sameOpt, type ShipPick } from "./store/Shipping";
+import { hasReturns, Perks, ReturnsSheet } from "./store/Steps";
 import { Catalog, featured, isSoldOut, ShopFooter } from "./store/Catalog";
 import { Done } from "./store/Done";
 import { ProductPage, ProductSheet } from "./store/ProductSheet";
@@ -18,6 +20,8 @@ import { Viewer } from "./store/Viewer";
 import { tr } from "@/lib/i18n";
 import { LangSwitch } from "@/lib/i18n/LangSwitch";
 
+/** The last shipping destination picked, remembered with the buyer's details. */
+const destKey = "toko.dest";
 /** Products listed in a shared catalog message. */
 const SHARE_MAX = 10;
 
@@ -28,7 +32,7 @@ type ViewerState = { productId: string; variantId?: string; start: number; media
 type ToastAction = { label: string; run?: () => void; href?: string };
 type ToastState = { msg: string; key: number; action?: ToastAction };
 type OrderReply = { code?: string; waUrl?: string; message?: string; total?: number; subtotal?: number; pcs?: number; tier?: boolean; promo?: { name: string; amount: number } | null; error?: string;
-  items?: { name: string; variant: string; size: string; qty: number; price: number }[] };
+  items?: { name: string; variant: string; size: string; qty: number; price: number }[]; shipping?: OrderShipping | null };
 
 type Props = {
   data: StoreData; api: string;
@@ -64,6 +68,22 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const [viewer, setViewer] = useState<ViewerState | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+  // "Cara retur / tukar" sheet (opened from the product, the done view)
+  const [retSheet, setRetSheet] = useState<{ closing: boolean } | null>(null);
+  const retTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const openReturns = useCallback(() => { clearTimeout(retTimer.current); setRetSheet({ closing: false }); }, []);
+  const closeReturns = useCallback(() => {
+    setRetSheet((s) => (s && !s.closing ? { closing: true } : s));
+    clearTimeout(retTimer.current);
+    retTimer.current = setTimeout(() => setRetSheet(null), 220);
+  }, []);
+  // Live shipping prices (RajaOngkir through the POS): destination, the shop's quote for it, the courier picked.
+  // shipDown: why it is not working right now; the order then goes without shipping and the shop tells the cost.
+  const [dest, setDestState] = useState<Destination | null>(null);
+  const [shipQ, setShipQ] = useState<{ key: string; q: ShipQuote } | null>(null);
+  const [shipLoading, setShipLoading] = useState(false);
+  const [shipPick, setShipPick] = useState<ShipPick | null>(null);
+  const [shipDown, setShipDown] = useState("");
   // Catalog category / sort / filter, kept here so a trip to the cart and back keeps the same list.
   const [browse, setBrowseState] = useState<Browse>(BROWSE0);
   const setBrowse = useCallback((patch: Partial<Browse>) => setBrowseState((b) => ({ ...b, ...patch })), []);
@@ -156,6 +176,8 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     local.set(cartKey(slug), clamped);
     setCart(clamped);
     setBuyer(loadBuyer());
+    const dd = local.get<Destination | null>(destKey, null);
+    if (dd && dd.id != null && typeof dd.label === "string") setDestState(dd);
     setCodeState(session.get<string>(codeKey(slug), "") || "");
     // A just-placed order comes back (e.g. after the jump to WhatsApp) only on the store page it was placed on, without
     // a product in the link, and for DONE_TTL_MS; any other page forgets it.
@@ -192,12 +214,12 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   useEffect(() => { if (nav) window.scrollTo(0, scrollTarget.current); }, [nav]);
 
   // Document-level keys and tab focus, read through a ref so the listeners see current state.
-  const live = useRef({ viewer, sheet, busy, refresh, closeSheet });
-  useEffect(() => { live.current = { viewer, sheet, busy, refresh, closeSheet }; });
+  const live = useRef({ viewer, sheet, busy, refresh, closeSheet, retSheet, closeReturns });
+  useEffect(() => { live.current = { viewer, sheet, busy, refresh, closeSheet, retSheet, closeReturns }; });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (live.current.viewer) setViewer(null); else live.current.closeSheet();
+      if (live.current.viewer) setViewer(null); else if (live.current.retSheet) live.current.closeReturns(); else live.current.closeSheet();
     };
     const onVisible = () => {
       if (document.visibilityState === "visible" && !live.current.sheet && !live.current.busy) void live.current.refresh();
@@ -207,7 +229,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("visibilitychange", onVisible); };
   }, []);
 
-  useEffect(() => () => { clearTimeout(sheetTimer.current); clearTimeout(toastTimer.current); }, []);
+  useEffect(() => () => { clearTimeout(sheetTimer.current); clearTimeout(toastTimer.current); clearTimeout(retTimer.current); }, []);
 
   const openProduct = (id: string) => {
     const p = findProduct(data, id);
@@ -310,6 +332,48 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     return () => { live = false; clearTimeout(t); };
   }, [wantsQuote, api, slug, cart, code, phoneDigits]);
 
+  // Shipping quote for the cart to the chosen destination, asked again whenever the cart or destination changes.
+  const shipLive = data.shipping?.provider === "rajaongkir" && !shipDown;
+  const wantsShip = ready && view === "keranjang" && cart.length > 0 && shipLive && buyer.delivery === "ship" && !!dest;
+  const shipKey = wantsShip && dest ? JSON.stringify([dest.id, cart, ref?.code ?? ""]) : "";
+  useEffect(() => {
+    if (!shipKey || !dest) { setShipLoading(false); return; }
+    let live = true;
+    setShipLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`${api}/api/public/stores/${slug}/shipping/quote`, {
+          method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+          body: JSON.stringify({ destinationId: dest.id, items: cartRef.current, ...(refCode.current ? { ref: refCode.current } : {}) }),
+        });
+        if (!live) return;
+        // 429: asked too often; keep what is shown
+        if (r.status === 429) { setShipLoading(false); return; }
+        const j = (await r.json().catch(() => null)) as ShipQuote | null;
+        if (!r.ok || !j || !Array.isArray(j.options)) throw new Error(String(r.status));
+        setShipQ({ key: shipKey, q: j });
+        setShipLoading(false);
+      } catch (e) {
+        if (!live) return;
+        setShipLoading(false);
+        setShipDown((e as Error)?.name === "TimeoutError" ? tr("Cek ongkir sedang lambat.") : tr("Cek ongkir sedang tidak bisa dipakai."));
+      }
+    }, 300);
+    return () => { live = false; clearTimeout(t); };
+  }, [shipKey, dest, api, slug]);
+  const shipQuote = shipQ && shipQ.key === shipKey ? shipQ.q : shipQ && shipLoading && dest && JSON.parse(shipQ.key)[0] === dest.id ? shipQ.q : null;
+  const shipOption = shipQuote && shipPick ? shipQuote.options.find((o) => sameOpt(shipPick, o)) ?? null : null;
+  const setDest = (d: Destination | null) => {
+    orderId.current = null;
+    setDestState(d);
+    local.set(destKey, d ? { id: d.id, label: d.label, free: !!d.free } : null);
+    if (!d || d.id !== dest?.id) { setShipPick(null); setShipQ(null); }
+  };
+  const shipCtx: ShipCtx | undefined = data.shipping?.provider === "rajaongkir" ? {
+    live: shipLive, down: shipDown, api, slug, dest, onDest: setDest, quote: shipQuote, loading: shipLoading || (!!shipKey && !shipQuote),
+    pick: shipPick, onPick: (p) => { orderId.current = null; setShipPick(p); }, onDown: setShipDown, option: shipQuote && !shipLoading ? shipOption : null,
+  } : undefined;
+
   const updateBuyer = (patch: Partial<Buyer>) => {
     // new details make a new order: a resend with the old id would get the old details back
     if (Object.entries(patch).some(([k, v]) => buyerRef.current[k as keyof Buyer] !== v)) orderId.current = null;
@@ -324,16 +388,25 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     setBusy(true);
     orderId.current = orderId.current || uid();
     const ship = buyer.delivery === "ship";
+    // the shop re-prices the shipping itself; only the choice is sent
+    const opt = ship ? shipCtx?.option : null;
+    const shipping = opt && dest ? { destinationId: dest.id, destinationLabel: dest.label, courier: opt.courier, service: opt.service } : null;
     let res: Response;
     let reply: OrderReply = {};
-    try {
+    const send = async (withShip: boolean) => {
       res = await fetch(`${api}/api/public/stores/${slug}/orders`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         signal: AbortSignal.timeout(ORDER_TIMEOUT_MS),
-        body: JSON.stringify({ id: orderId.current, items: cart, name, phone, address: ship ? address : "", delivery: buyer.delivery, note: buyer.note || "", ...(ref ? { ref: ref.code } : {}), ...(code ? { code } : {}) }),
+        body: JSON.stringify({ id: orderId.current, items: cart, name, phone, address: ship ? address : "", delivery: buyer.delivery, note: buyer.note || "", ...(ref ? { ref: ref.code } : {}), ...(code ? { code } : {}),
+          ...(withShip && shipping ? { shipping } : {}) }),
       });
       reply = (await res.json().catch(() => ({}))) as OrderReply;
+    };
+    try {
+      await send(true);
+      // the shop could not price the shipping just now: the order still goes, the shop tells the cost on WhatsApp
+      if (shipping && !res!.ok && res!.status >= 500) { setShipDown(tr("Cek ongkir sedang tidak bisa dipakai.")); await send(false); }
     } catch (e) {
       setBusy(false);
       // Sending again is safe: the order id makes the shop recognise a repeat instead of doubling it.
@@ -346,6 +419,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
       return;
     }
     setBusy(false);
+    res = res!;
     if (!res.ok) {
       showToast(reply.error || tr("Pesanan gagal dikirim. Coba lagi."));
       if (res.status === 409) { orderId.current = null; await refresh(); }
@@ -354,9 +428,10 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     const placed: DoneOrder = { code: reply.code ?? "", waUrl: reply.waUrl ?? "", total: reply.total ?? 0, pcs: reply.pcs ?? 0, tier: !!reply.tier, promo: reply.promo ?? null,
       at: Date.now(), home: homeRef.current || "/",
       ...(Array.isArray(reply.items) ? { items: reply.items.slice(0, 50).map(({ name, variant, size, qty, price }) => ({ name, variant, size, qty, price })) } : {}),
-      ...(typeof reply.subtotal === "number" ? { subtotal: reply.subtotal } : {}), ...(reply.message ? { message: reply.message } : {}) };
+      ...(typeof reply.subtotal === "number" ? { subtotal: reply.subtotal } : {}), ...(reply.message ? { message: reply.message } : {}),
+      ...(reply.shipping && typeof reply.shipping.cost === "number" ? { shipping: reply.shipping } : {}) };
     // the shop priced it with its latest prices and promo; say so when that differs from what the cart showed
-    const shown = cartTotal(data, cart) - (quote && quote.subtotal === cartTotal(data, cart) && quote.promo ? quote.promo.amount : 0);
+    const shown = cartTotal(data, cart) - (quote && quote.subtotal === cartTotal(data, cart) && quote.promo ? quote.promo.amount : 0) + (reply.shipping ? shipCost(shipCtx, buyer.delivery) || 0 : 0);
     if (reply.total !== undefined && reply.total !== shown) showToast(tr("Harga sudah diperbarui toko. Total pesananmu {total}.", { total: rp(reply.total) }));
     saveCart([]);
     updateBuyer({ note: "" });
@@ -370,6 +445,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
 
   const brand = normBrand(data.brand);
   const pcs = cartPcs(cart);
+  const hasRet = hasReturns(data);
 
   let content: ReactNode = null;
   // the product page also renders on the server (its content does not depend on browser storage until the cart loads)
@@ -380,7 +456,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
         onSize={(size) => pagePatch({ size, qty: 1 })}
         onQty={(qty) => pagePatch({ size: paged.size, qty })}
         onView={(i) => setViewer({ productId: paged.p.id, variantId: paged.v.id, start: i })}
-        onAdd={addFromPage} onShare={() => void shareProduct()} />
+        onAdd={addFromPage} onShare={() => void shareProduct()} perks={<Perks data={data} onReturns={openReturns} />} />
     );
   } else if (!ready) content = null;
   else if (closed) content = <div className="empty"><b>{tr("Toko sedang tutup.")}</b> {tr("Coba lagi nanti.")}</div>;
@@ -395,11 +471,11 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
           saveCart(cart.filter((_, j) => j !== i));
           showToast(tr("Barang dihapus dari keranjang"), { label: tr("Batalkan"), run: () => saveCart(before) });
         }}
-        onBuyer={updateBuyer} onToast={showToast} onPlace={(c) => void placeOrder(c)} code={code} quote={quote} onCode={setCode} />
+        onBuyer={updateBuyer} onToast={showToast} onPlace={(c) => void placeOrder(c)} code={code} quote={quote} onCode={setCode} ship={shipCtx} />
     );
   } else if (view === "selesai" && done) {
     // Once the buyer taps through to WhatsApp, the done view has done its job: a later visit starts fresh.
-    content = <Done order={done} shop={data.shop} whatsapp={data.whatsapp} payment={data.payment ?? null} onWa={() => session.set(doneKey(slug), null)} onNew={() => go("katalog")}
+    content = <Done order={done} onReturns={hasRet ? openReturns : undefined} shop={data.shop} whatsapp={data.whatsapp} payment={data.payment ?? null} onWa={() => session.set(doneKey(slug), null)} onNew={() => go("katalog")}
       onToast={showToast} onZoom={(url) => setViewer({ productId: "", start: 0, media: [{ url, type: "image" }], caption: tr("QRIS {shop}", { shop: data.shop }) })} />;
   } else {
     const save = cartBase(data, cart) - cartTotal(data, cart);
@@ -459,9 +535,10 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
             onSize={(size) => pick({ size, qty: 1 })}
             onQty={(qty) => pick({ size: shown.size, qty })}
             onView={(i) => setViewer({ productId: shown.p.id, variantId: shown.v.id, start: i })}
-            onAdd={addToCart} onShare={() => void shareProduct()} />
+            onAdd={addToCart} onShare={() => void shareProduct()} perks={<Perks data={data} onReturns={openReturns} />} />
         ) : null}
       </div>
+      <div id="ret-root">{retSheet ? <ReturnsSheet data={data} closing={retSheet.closing} onClose={closeReturns} /> : null}</div>
       <div id="toast-root">
         {toast ? (
           <div className={toast.action ? "toast has-act" : "toast"} role="status" key={toast.key}>
