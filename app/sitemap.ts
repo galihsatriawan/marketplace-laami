@@ -13,6 +13,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   if (!slug) return out;
   const r = await getStore(slug);
   if (!r.ok) return out;
-  for (const p of r.data.products) out.push({ url: `${origin}/p/${encodeURIComponent(p.slug || p.id)}`, changeFrequency: "daily", priority: 0.8 });
+  // sold-out products stay listed (their page still answers, marked out of stock), just lower
+  for (const p of r.data.products) out.push({ url: `${origin}/p/${encodeURIComponent(p.slug || p.id)}`, changeFrequency: "daily", priority: p.soldOut ? 0.4 : 0.8 });
   return out;
 }
