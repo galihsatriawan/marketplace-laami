@@ -66,7 +66,9 @@ export interface StoreShipping { provider: "manual" | "rajaongkir" | "biteship";
   /** Older POS versions send none (= "ok"). */
   quota?: ShipQuota;
   /** "Subsidi ongkir": the shop takes Rp per pcs off the courier cost; null / absent = none (or an older POS). */
-  subsidy?: ShipSubsidy | null }
+  subsidy?: ShipSubsidy | null;
+  /** Newer POS: grams of packaging added once per order to the goods' weight before rounding up to kg (absent = 0). */
+  packagingGrams?: number }
 /** Shipping discount per pcs (perPcs = the default rate; products carry their own resolved `shipSubsidy`).
  *  maxPerOrder 0 = no cap; minPcs: pcs in the order before it applies; resellerLinks: also on reseller (?ref) links. */
 export interface ShipSubsidy { perPcs: number; maxPerOrder: number; minPcs: number; resellerLinks: boolean }
