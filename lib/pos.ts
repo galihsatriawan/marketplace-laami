@@ -25,8 +25,11 @@ export interface StoreData {
   payment?: StorePayment | null;
   /** The shop's own "Cara belanja" / "Cara retur / tukar" steps; empty `order` = the built-in steps, empty `returns` = none. */
   steps?: StoreSteps;
-  /** How shipping is priced: "rajaongkir" = live courier rates at checkout; "manual" = the shop tells the cost on WhatsApp. */
+  /** How shipping is priced: any provider but "manual" = live courier rates at checkout; "manual" = the shop tells the cost on WhatsApp. */
   shipping?: StoreShipping;
+  /** Live ongkir: signed token for the x-ship-token header of the shipping endpoints, and when it expires (ms epoch).
+   *  Older POS versions send none (the header is then left out). */
+  shipToken?: string; shipTokenExpiresAt?: number;
   products: { id: string; slug?: string; name: string; category?: string; subcategory?: string; price: number;
     /** v2 badges: arrived recently (or marked new), among the shop's bestsellers (rank 1 = top), nothing left. */
     isNew?: boolean; bestseller?: boolean; bestsellerRank?: number; soldOut?: boolean;
@@ -56,7 +59,10 @@ export interface StoreSteps { order: Step[]; returns: Step[]; returnNote: string
 export interface FreeArea { name: string; minSpend: number }
 /** How much of the shop's daily RajaOngkir allowance is left: "out" = no live ongkir today (the shop tells it on WhatsApp). */
 export type ShipQuota = "ok" | "low" | "out";
-export interface StoreShipping { provider: "manual" | "rajaongkir"; freeAreas: FreeArea[]; badge: boolean;
+export interface StoreShipping { provider: "manual" | "rajaongkir" | "biteship";
+  /** Newer POS: which API prices the live ongkir (provider may stay "rajaongkir" for older storefronts). */
+  source?: "rajaongkir" | "biteship";
+  freeAreas: FreeArea[]; badge: boolean;
   /** Older POS versions send none (= "ok"). */
   quota?: ShipQuota;
   /** "Subsidi ongkir": the shop takes Rp per pcs off the courier cost; null / absent = none (or an older POS). */
@@ -65,7 +71,8 @@ export interface StoreShipping { provider: "manual" | "rajaongkir"; freeAreas: F
  *  maxPerOrder 0 = no cap; minPcs: pcs in the order before it applies; resellerLinks: also on reseller (?ref) links. */
 export interface ShipSubsidy { perPcs: number; maxPerOrder: number; minPcs: number; resellerLinks: boolean }
 /** A place a parcel can go, from the shop's destination search. free: inside one of the shop's free-shipping areas. */
-export interface Destination { id: number | string; label: string; district?: string; city?: string; province?: string; zip?: string; free?: boolean }
+/** id: number or string as the shop sent it; sent back unchanged, compared with String(). */
+export interface Destination { id: string | number; label: string; district?: string; city?: string; province?: string; zip?: string; free?: boolean }
 /** One courier service with its price for this cart. */
 export interface ShipOption { courier: string; courierName: string; service: string; description: string; cost: number; etd: string;
   /** Newer POS with a subsidy: what the buyer pays for this option (cost − subsidy). */
@@ -91,6 +98,8 @@ export interface PublicPromo {
 /** The POS's price for a cart with its promo (a typed code, else the best automatic one). `error`: why a code does not work. */
 export interface Quote { pcs: number; subtotal: number; total: number; tier: boolean; promo: { id: string; name: string; code?: string; amount: number } | null; error?: string;
   /** The reason as a template + values, for tr(). */ errorTpl?: string; errorVars?: Record<string, string | number> }
+/** Live courier rates at checkout: any provider but "manual" (older POS: "rajaongkir"; newer may name "biteship"). */
+export const liveShipping = (sh?: StoreShipping | null) => !!sh?.provider && sh.provider !== "manual";
 export type StoreResult = { ok: true; data: StoreData } | { ok: false; status: number };
 
 /** How long a server render waits for the POS before showing "shop unavailable" (503). */

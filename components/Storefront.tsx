@@ -3,7 +3,7 @@
 // Public storefront: catalog -> cart -> checkout. The order goes to the POS (re-priced and checked there) and the
 // buyer sends the composed message to the shop's WhatsApp. Laid out like a modern marketplace: search in the header, grid catalog, dialog product page.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { storeQuery, type Destination, type OrderShipping, type Quote, type ShipQuote, type StoreData } from "@/lib/pos";
+import { liveShipping, storeQuery, type Destination, type OrderShipping, type Quote, type ShipQuote, type StoreData } from "@/lib/pos";
 import {
   applyBrandColor, BROWSE0, cartBase, cartSubsidy, cartKey, codeKey, DONE_TTL_MS, FETCH_TIMEOUT_MS, ORDER_TIMEOUT_MS, productPath, REF_DAYS, refKey, cartPcs, cartTotal, clampCart,
   doneKey, findProduct, loadBuyer, local, mediaOf, normBrand, rp, saveBuyer, session, sheetState, uid, unitPrice, variantOf, variantStock,
@@ -11,7 +11,7 @@ import {
 } from "@/lib/store";
 import { Mark } from "./Mark";
 import { Cart, shipCost, type Checkout, type ShipCtx } from "./store/Cart";
-import { cartWeightKg, quotaNote, RECENT_MAX, sameOpt, type ShipPick } from "./store/Shipping";
+import { cartWeightKg, quotaNote, RECENT_MAX, sameOpt, type ShipFetch, type ShipPick } from "./store/Shipping";
 import { hasReturns, Perks, ReturnsSheet } from "./store/Steps";
 import { Catalog, featured, isSoldOut, ShopFooter } from "./store/Catalog";
 import { Done } from "./store/Done";
@@ -30,6 +30,21 @@ const shipDownKey = (slug: string) => `toko.shipdown.${slug}`;
 const SHIP_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const SHIP_CACHE_MAX = 12;
 type ShipCache = Record<string, { q: ShipQuote; at: number }>;
+/** Header the POS reads the catalog's ship token from (paid ongkir endpoints only). */
+const SHIP_TOKEN_HEADER = "x-ship-token";
+/** Renew the ship token this long before it expires. */
+const SHIP_TOKEN_EARLY_MS = 5 * 60 * 1000;
+/** At most one token-driven catalog refresh this often. */
+const SHIP_RENEW_GAP_MS = 30 * 1000;
+const TOKEN_CODES = new Set(["ship_token_expired", "ship_token_invalid", "ship_token_missing"]);
+/** Why the POS refused a paid ongkir call before doing it: "token" (401, renew and retry once), "origin" (403, no retry). */
+async function shipRefused(r: Response): Promise<"token" | "origin" | null> {
+  if (r.status !== 401 && r.status !== 403) return null;
+  const j = (await r.clone().json().catch(() => null)) as { code?: string } | null;
+  if (r.status === 401 && j?.code && TOKEN_CODES.has(j.code)) return "token";
+  if (r.status === 403 && j?.code === "origin") return "origin";
+  return null;
+}
 const shipKeyOf = (id: Destination["id"], kg: number) => `${id}|${kg}`;
 /** Older versions kept one destination; now a short list. */
 function readRecent(v: unknown): Destination[] {
@@ -187,13 +202,16 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     setNav((n) => n + 1);
   }, [slug]);
 
-  const refresh = useCallback(async () => {
+  // Ship token for the paid ongkir endpoints (from the catalog; renewed by any catalog refresh).
+  const shipTok = useRef({ token: initial.shipToken, exp: initial.shipTokenExpiresAt });
+  const refresh = useCallback(async (): Promise<StoreData | null> => {
     try {
       // keep the reseller's link: their held stock is part of what this buyer may order
       const r = await fetch(`${api}/api/public/stores/${slug}${storeQuery(refCode.current)}`, { cache: "no-store", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-      if (r.status === 404) { setClosed(true); return; }
-      if (!r.ok) return;
+      if (r.status === 404) { setClosed(true); return null; }
+      if (!r.ok) return null;
       const next = (await r.json()) as StoreData;
+      shipTok.current = { token: next.shipToken, exp: next.shipTokenExpiresAt };
       if (refCode.current && !next.ref) {
         // the reseller was removed: stop crediting them
         refCode.current = null;
@@ -205,10 +223,42 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
       setData(next);
       setCart(clamped);
       setClosed(false);
-    } catch { /* offline or no answer in time: keep what is shown */ }
+      return next;
+    } catch { /* offline or no answer in time: keep what is shown */ return null; }
   }, [api, slug]);
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
+  // A new ship token comes with a fresh catalog: one refresh at a time, at most one every SHIP_RENEW_GAP_MS.
+  const renewing = useRef<Promise<boolean> | null>(null);
+  const lastRenew = useRef(0);
+  const renewShipToken = useCallback((): Promise<boolean> => {
+    if (renewing.current) return renewing.current;
+    if (Date.now() - lastRenew.current < SHIP_RENEW_GAP_MS) return Promise.resolve(false);
+    lastRenew.current = Date.now();
+    const before = shipTok.current.token;
+    renewing.current = refreshRef.current().then((next) => !!next?.shipToken && next.shipToken !== before)
+      .finally(() => { renewing.current = null; });
+    return renewing.current;
+  }, []);
+  /** fetch for the paid ongkir endpoints: sends the ship token (when the shop gave one), renews it shortly before it
+   *  expires, and on a 401 for the token renews it and tries once more. Still refused, or 403 (origin): throws, and
+   *  the caller falls back to "Ongkir dikabari toko". Older POS (no token): a plain fetch. */
+  const shipFetch = useCallback<ShipFetch>(async (url, init) => {
+    const go = (token?: string) => {
+      const i = init();
+      return fetch(url, { ...i, headers: { ...(i.headers as Record<string, string> | undefined), ...(token ? { [SHIP_TOKEN_HEADER]: token } : {}) } });
+    };
+    const t = shipTok.current;
+    if (t.token && Number(t.exp) && Date.now() > Number(t.exp) - SHIP_TOKEN_EARLY_MS) await renewShipToken();
+    let r = await go(shipTok.current.token);
+    let bad = await shipRefused(r);
+    if (bad === "token") {
+      const sent = shipTok.current.token;
+      if ((await renewShipToken()) || shipTok.current.token !== sent) { r = await go(shipTok.current.token); bad = await shipRefused(r); }
+    }
+    if (bad) throw new Error(`ship ${bad} ${r.status}`);
+    return r;
+  }, [renewShipToken]);
 
   // Mount: restore the cart, the buyer details and a just-placed order.
   useEffect(() => {
@@ -381,7 +431,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   // Shipping price for the cart to the chosen destination. The shop's RajaOngkir allowance is small (~100 a day), so a
   // price is asked once per destination and whole-kg weight: on picking a destination, else only when the buyer taps
   // "Cek ongkir" / "Cek ulang". Free shipping and the minimum spend are worked out here from the cart.
-  const shipOn = data.shipping?.provider === "rajaongkir" && data.shipping.quota !== "out";
+  const shipOn = liveShipping(data.shipping) && data.shipping?.quota !== "out";
   const shipLive = shipOn && !shipDown;
   const kg = cartWeightKg(data, cart);
   const goods = cartTotal(data, cart) - (quote && quote.subtotal === cartTotal(data, cart) && quote.promo ? quote.promo.amount : 0);
@@ -410,12 +460,12 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     shipLoadingRef.current = k;
     setShipLoading(k);
     try {
-      const r = await fetch(`${api}/api/public/stores/${slug}/shipping/quote`, {
+      const r = await shipFetch(`${api}/api/public/stores/${slug}/shipping/quote`, () => ({
         method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         // code + phone: the shop counts the promo toward a free area's minimum spend
         body: JSON.stringify({ destinationId: d.id, items: cartRef.current, ...(refCode.current ? { ref: refCode.current } : {}),
-          ...(codeRef.current ? { code: codeRef.current } : {}), ...(phoneRef.current ? { phone: phoneRef.current } : {}) }),
-      });
+          ...(codeRef.current ? { code: codeRef.current } : {}), ...(phoneRef.current ? { phone: phoneRef.current } : {}), delivery: "ship" }),
+      }));
       const quota = await quotaNote(r);
       if (quota) { downFor(quota.why, quota.retryMs); return; }
       const j = (await r.json().catch(() => null)) as ShipQuote | null;
@@ -435,7 +485,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   const setDest = (d: Destination | null) => {
     orderId.current = null;
     setDestState(d);
-    if (!d || d.id !== dest?.id) setShipPick(null);
+    if (!d || String(d.id) !== String(dest?.id)) setShipPick(null);
     if (!d) return;
     const rec = [{ id: d.id, label: d.label, free: !!d.free }, ...recent.filter((x) => String(x.id) !== String(d.id))].slice(0, RECENT_MAX);
     setRecent(rec);
@@ -446,7 +496,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   const shipCtx: ShipCtx | undefined = shipOn ? {
     live: shipLive, down: shipDown, api, slug, dest, onDest: setDest, quote: shipQuote, loading: shipBusy,
     stale: shipStale, onCheck: () => { if (dest) askShip(dest, kg); }, recent, limited: data.shipping?.quota === "low",
-    pick: shipPick, onPick: (p) => { orderId.current = null; setShipPick(p); }, onDown: downFor, option: shipQuote && !shipBusy ? shipOption : null,
+    pick: shipPick, onPick: (p) => { orderId.current = null; setShipPick(p); }, onDown: downFor, option: shipQuote && !shipBusy ? shipOption : null, shipFetch,
   } : undefined;
 
   const updateBuyer = (patch: Partial<Buyer>) => {

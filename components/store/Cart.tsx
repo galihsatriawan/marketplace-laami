@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import type { Destination, Quote, ShipQuote, StoreData } from "@/lib/pos";
 import { tr } from "@/lib/i18n";
 import { rpShort } from "./ProductSheet";
-import { fmtEtd, optCost, optRaw, ShipBox, type ShipPick } from "./Shipping";
+import { fmtEtd, optCost, optRaw, ShipBox, type ShipFetch, type ShipPick } from "./Shipping";
 import { areaNames, freeAreas, Truck } from "./Steps";
 import {
   cartBase, cartPcs, cartSubsidy, cartTotal, cover, findProduct, nextTier, normBrand, num, rp, unitPrice, variantCover, wasPrice, variantOf,
@@ -42,6 +42,8 @@ export type ShipCtx = {
   pick: ShipPick | null; onPick: (p: ShipPick) => void; onDown: (msg: string, retryMs?: number) => void;
   /** The picked option in the current quote (null when none / stale). */
   option: ShipQuote["options"][number] | null;
+  /** fetch for the paid shipping endpoints: adds the shop's ship token and renews it once when refused. */
+  shipFetch: ShipFetch;
 };
 /** What the buyer pays for shipping right now (after the ongkir subsidy); null = not known (the shop tells it). */
 export const shipCost = (s: ShipCtx | undefined, delivery: Delivery) =>
@@ -222,7 +224,7 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
                     <b>{tr("Dikirim")}</b><span>{sc?.live ? tr("Pilih kurir, ongkir langsung dihitung") : tr("Ongkir dikabari toko")}</span></button>
                 </div></div>
               {ship && sc?.live ? (
-                <ShipBox api={sc.api} slug={sc.slug} dest={sc.dest} onDest={sc.onDest} quote={sc.quote} loading={sc.loading} stale={sc.stale} onCheck={sc.onCheck} recent={sc.recent} limited={sc.limited} pick={sc.pick} onPick={sc.onPick} onDown={sc.onDown}
+                <ShipBox api={sc.api} slug={sc.slug} dest={sc.dest} onDest={sc.onDest} quote={sc.quote} loading={sc.loading} stale={sc.stale} onCheck={sc.onCheck} recent={sc.recent} limited={sc.limited} pick={sc.pick} onPick={sc.onPick} onDown={sc.onDown} shipFetch={sc.shipFetch}
                   err={{ dest: errs.dest, courier: errs.courier }} destRef={destRef} optsRef={optsRef} />
               ) : null}
               {ship ? (

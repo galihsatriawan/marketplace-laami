@@ -1,4 +1,4 @@
-// Checkout shipping when the shop prices it live (RajaOngkir through the POS): pick the destination
+// Checkout shipping when the shop prices it live (RajaOngkir / Biteship through the POS): pick the destination
 // (kecamatan / kelurahan search), then a courier service. Any failure falls back to "Ongkir dikabari toko".
 // The shop's RajaOngkir plan allows only ~100 lookups a day, so this asks as rarely as it can: searches run on
 // Enter / "Cari" / a long pause, answers are kept for the session, and a price is asked again only when the
@@ -41,6 +41,9 @@ export async function quotaNote(r: Response): Promise<{ why: string; retryMs: nu
   }
   return null;
 }
+
+/** fetch for the paid ongkir endpoints with the shop's ship token (see useShipToken); `init` is called per attempt. */
+export type ShipFetch = (url: string, init: () => RequestInit) => Promise<Response>;
 
 /** Destination searches answered this session, per lowercased query (memory + sessionStorage). */
 const destCacheKey = (slug: string) => `toko.destq.${slug}`;
@@ -88,12 +91,13 @@ type Props = {
   pick: ShipPick | null; onPick: (p: ShipPick) => void;
   /** The shop's shipping prices cannot be reached: the reason (shown) and how long to wait; the order goes without shipping. */
   onDown: (msg: string, retryMs?: number) => void;
+  shipFetch: ShipFetch;
   err?: { dest?: string; courier?: string };
   destRef?: React.RefObject<HTMLInputElement | null>;
   optsRef?: React.RefObject<HTMLDivElement | null>;
 };
 
-export function ShipBox({ api, slug, dest, onDest, quote, loading, stale, onCheck, recent, limited, pick, onPick, onDown, err, destRef, optsRef }: Props) {
+export function ShipBox({ api, slug, dest, onDest, quote, loading, stale, onCheck, recent, limited, pick, onPick, onDown, shipFetch, err, destRef, optsRef }: Props) {
   const [q, setQ] = useState("");
   // results for `forQ` (what was searched), so typing on does not pretend the old list matches
   const [found, setFound] = useState<{ q: string; list: Destination[] } | null>(null);
@@ -125,8 +129,8 @@ export function ShipBox({ api, slug, dest, onDest, quote, loading, stale, onChec
     inflightQ.current = t;
     setSearching(true);
     try {
-      const r = await fetch(`${api}/api/public/stores/${slug}/shipping/destinations?q=${encodeURIComponent(t)}`,
-        { signal: AbortSignal.any ? AbortSignal.any([ac.signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]) : ac.signal, cache: "no-store" });
+      const r = await shipFetch(`${api}/api/public/stores/${slug}/shipping/destinations?q=${encodeURIComponent(t)}`,
+        () => ({ signal: AbortSignal.any ? AbortSignal.any([ac.signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]) : ac.signal, cache: "no-store" }));
       if (ac.signal.aborted) return;
       inflightQ.current = "";
       const quota = await quotaNote(r);
@@ -203,7 +207,7 @@ export function ShipBox({ api, slug, dest, onDest, quote, loading, stale, onChec
             {results?.length ? (
               <ul className="dest-list" id={listId} role="listbox" aria-label={tr("Hasil pencarian tujuan")}>
                 {results.map((d) => (
-                  <li key={String(d.id)} role="option" aria-selected={dest?.id === d.id}>
+                  <li key={String(d.id)} role="option" aria-selected={!!dest && String(dest.id) === String(d.id)}>
                     <button type="button" data-act="dest" data-id={String(d.id)} onClick={() => choose(d)}>
                       <span className="dest-l">{d.label}</span>
                       {d.free ? <span className="free-tag">{tr("Gratis ongkir")}</span> : null}

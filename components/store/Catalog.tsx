@@ -1,4 +1,4 @@
-import type { StoreData } from "@/lib/pos";
+import { liveShipping, type StoreData } from "@/lib/pos";
 import { cover, normBrand, num, promoTerms, promoTitle, rp, sizeEntries, strikePct, tierHint, tiersOf, variantCover, wasPrice, type Browse, type Product, type Sort } from "@/lib/store";
 import { tr } from "@/lib/i18n";
 import { areaMin, areaNames, hasReturns, orderSteps, ReturnIcon, ReturnsBody, showFreeBadge, Truck } from "./Steps";
@@ -285,7 +285,7 @@ export function ShopFooter({ data }: { data: StoreData }) {
   const brand = normBrand(data.brand);
   const links = shopLinks(data);
   const own = orderSteps(data);
-  const priced = data.shipping?.provider === "rajaongkir";
+  const priced = liveShipping(data.shipping);
   return (
     <footer className={hasReturns(data) ? "shop-foot has-ret" : "shop-foot"}>
       <section className="foot-how" aria-labelledby="foot-how-h">
