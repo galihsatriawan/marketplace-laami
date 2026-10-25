@@ -21,6 +21,8 @@ export interface StoreData {
   v?: number;
   /** v2: sold-out products and 0-stock sizes are listed (shown crossed out, never orderable). */
   showSoldOut?: boolean;
+  /** How buyers pay the shop (bank accounts, e-wallets, QRIS image, note); null or absent when the shop set none. */
+  payment?: StorePayment | null;
   products: { id: string; slug?: string; name: string; category?: string; subcategory?: string; price: number;
     /** v2 badges: arrived recently (or marked new), among the shop's bestsellers (rank 1 = top), nothing left. */
     isNew?: boolean; bestseller?: boolean; bestsellerRank?: number; soldOut?: boolean;
@@ -28,7 +30,17 @@ export interface StoreData {
     descriptionText?: string;
     /** Struck-through price ("harga coret") shown next to `price`; display only, buyers pay `price`. Only sent when higher. */
     strike?: number; tiers: { min: number; price: number }[];
+    /** Product description as HTML the POS already sanitized (p br strong b em i ul ol li h3 a); "" or absent when none. */
+    description?: string;
     variants: { id: string; name: string; media: { url: string; type: "image" | "video" }[]; stock: Record<string, number> }[] }[];
+}
+/** The shop's payment methods as the public catalog lists them; account numbers are the shop's own, published on purpose. */
+export interface StorePayment {
+  banks: { bank: string; number: string; holder: string }[];
+  wallets: { wallet: string; number: string; holder: string }[];
+  /** Absolute link to the QRIS image. */
+  qris?: string;
+  note: string;
 }
 /** An automatic promo as the POS lists it: "some" = only some products or categories. */
 export interface PublicPromo {

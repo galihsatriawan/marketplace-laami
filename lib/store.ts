@@ -7,7 +7,8 @@ export type Variant = Product["variants"][number];
 export type Media = Variant["media"][number];
 export type Brand = StoreData["brand"];
 
-export type View = "katalog" | "keranjang" | "selesai";
+/** produk: a product on its own page (a /p/<product> link opened directly). */
+export type View = "katalog" | "keranjang" | "selesai" | "produk";
 export type Delivery = "pickup" | "ship";
 
 export interface CartLine { productId: string; variantId: string; size: string; qty: number }
@@ -15,7 +16,11 @@ export interface Buyer { name: string; phone: string; address: string; delivery:
 /** The last placed order, kept for this browser tab so the "done" view survives the jump to WhatsApp. */
 export interface DoneOrder { code: string; waUrl: string; total: number; pcs: number; tier: boolean; promo?: { name: string; amount: number } | null;
   /** When it was placed (ms) and the store path it was placed on: the done view only comes back there, and not for long. */
-  at?: number; home?: string }
+  at?: number; home?: string;
+  /** What was ordered as the shop priced it, and the total before the promo (newer POS versions send them). */
+  items?: { name: string; variant: string; size: string; qty: number; price: number }[]; subtotal?: number;
+  /** The composed WhatsApp text, for copying when WhatsApp does not open. */
+  message?: string }
 /** How long a placed order's done view comes back after a reload (e.g. returning from WhatsApp). */
 export const DONE_TTL_MS = 30 * 60_000;
 /** Catalog browsing choices, kept while the buyer visits the cart so "Lanjut belanja" returns to the same list. */

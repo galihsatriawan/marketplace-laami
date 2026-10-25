@@ -7,13 +7,13 @@ import { storeQuery, type Quote, type StoreData } from "@/lib/pos";
 import {
   applyBrandColor, BROWSE0, cartBase, cartKey, codeKey, DONE_TTL_MS, FETCH_TIMEOUT_MS, ORDER_TIMEOUT_MS, productPath, REF_DAYS, refKey, cartPcs, cartTotal, clampCart,
   doneKey, findProduct, loadBuyer, local, mediaOf, normBrand, rp, saveBuyer, session, sheetState, uid, unitPrice, variantOf, variantStock,
-  type Browse, type Buyer, type CartLine, type DoneOrder, type Ref, type SheetPick, type View,
+  type Browse, type Buyer, type CartLine, type DoneOrder, type Media, type Ref, type SheetPick, type View,
 } from "@/lib/store";
 import { Mark } from "./Mark";
 import { Cart, type Checkout } from "./store/Cart";
 import { Catalog, featured, isSoldOut, ShopFooter } from "./store/Catalog";
 import { Done } from "./store/Done";
-import { ProductSheet } from "./store/ProductSheet";
+import { ProductPage, ProductSheet } from "./store/ProductSheet";
 import { Viewer } from "./store/Viewer";
 import { tr } from "@/lib/i18n";
 import { LangSwitch } from "@/lib/i18n/LangSwitch";
@@ -22,11 +22,13 @@ import { LangSwitch } from "@/lib/i18n/LangSwitch";
 const SHARE_MAX = 10;
 
 type SheetState = { pick: SheetPick; closing: boolean; key: number };
-type ViewerState = { productId: string; variantId?: string; start: number };
+/** The viewer shows a product's media, or other pictures (the shop's QRIS) given as `media`. */
+type ViewerState = { productId: string; variantId?: string; start: number; media?: Media[]; caption?: string };
 /** A toast may carry one action: a button (undo) or a link (chat the shop). */
 type ToastAction = { label: string; run?: () => void; href?: string };
 type ToastState = { msg: string; key: number; action?: ToastAction };
-type OrderReply = { code?: string; waUrl?: string; total?: number; pcs?: number; tier?: boolean; promo?: { name: string; amount: number } | null; error?: string };
+type OrderReply = { code?: string; waUrl?: string; message?: string; total?: number; subtotal?: number; pcs?: number; tier?: boolean; promo?: { name: string; amount: number } | null; error?: string;
+  items?: { name: string; variant: string; size: string; qty: number; price: number }[] };
 
 type Props = {
   data: StoreData; api: string;
@@ -41,8 +43,17 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   const slug = initial.slug;
   // Browser storage is read after mount, so nothing below the header renders on the server.
   const [ready, setReady] = useState(false);
-  const [view, setView] = useState<View>("katalog");
-  const viewRef = useRef<View>("katalog");
+  // A /p/<product> link opened directly is the product's own page (rendered on the server too); from the catalog a
+  // product opens as a sheet over the list.
+  const firstView: View = initialProduct && findProduct(initial, initialProduct) ? "produk" : "katalog";
+  const [view, setView] = useState<View>(firstView);
+  const viewRef = useRef<View>(firstView);
+  const [pagePick, setPagePick] = useState<SheetPick | null>(() => {
+    const p = initialProduct ? findProduct(initial, initialProduct) : undefined;
+    if (!p) return null;
+    const v0 = p.variants.find((v) => variantStock(v) > 0) || p.variants[0];
+    return { productId: p.id, variantId: v0.id, qty: 1 };
+  });
   const [nav, setNav] = useState(0); // bumped on every navigation: replays the enter animation
   const [closed, setClosed] = useState(false);
   const [query, setQuery] = useState("");
@@ -104,6 +115,8 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   /** Switches the view. restore: back to the catalog where the buyer left it (instead of the top). */
   const go = useCallback((v: View, opts: { restore?: boolean } = {}) => {
     if (viewRef.current === "katalog" && v !== "katalog") catalogScroll.current = window.scrollY;
+    // leaving the product page: the address bar goes back to the store's home
+    if (viewRef.current === "produk" && v !== "produk" && /\/p\/[^/]+$/.test(location.pathname)) history.replaceState(history.state, "", homeRef.current || "/");
     viewRef.current = v;
     setView(v);
     scrollTarget.current = v === "katalog" && opts.restore ? catalogScroll.current : 0;
@@ -172,8 +185,9 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
 
   useEffect(() => {
     applyBrandColor(normBrand(data.brand).color);
-    if (data.shop) document.title = data.shop;
-  }, [data.brand, data.shop]);
+    // the product page keeps its own title ("<product> · <shop>") from the server
+    if (data.shop && viewRef.current !== "produk") document.title = data.shop;
+  }, [data.brand, data.shop, view]);
 
   useEffect(() => { if (nav) window.scrollTo(0, scrollTarget.current); }, [nav]);
 
@@ -205,11 +219,12 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     history.replaceState(history.state, "", productPath(homeRef.current, p));
   };
   const shareProduct = async () => {
-    if (!shown) return;
-    const url = location.origin + productPath(home, shown.p);
-    const text = tr("{name} · {price} di {shop}", { name: shown.p.name, price: rp(shown.price), shop: data.shop });
+    const it = shown || (view === "produk" && pagePick ? sheetState(data, cart, pagePick) : null);
+    if (!it) return;
+    const url = location.origin + productPath(home, it.p);
+    const text = tr("{name} · {price} di {shop}", { name: it.p.name, price: rp(it.price), shop: data.shop });
     try {
-      if (navigator.share) { await navigator.share({ title: shown.p.name, text, url }); return; }
+      if (navigator.share) { await navigator.share({ title: it.p.name, text, url }); return; }
     } catch (e) { if ((e as Error).name === "AbortError") return; }
     try { await navigator.clipboard.writeText(url); showToast(tr("Link produk disalin")); } catch { showToast(url); }
   };
@@ -246,23 +261,28 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     return () => ro.disconnect();
   }, []);
 
-  // A /p/<product> link opens that product once the page is ready.
-  const opened = useRef(false);
-  useEffect(() => {
-    if (!ready || opened.current || !initialProduct) return;
-    opened.current = true;
-    openProduct(initialProduct);
-  });
   const pick = (patch: Partial<SheetPick>) => setSheet((s) => (s ? { ...s, pick: { ...s.pick, ...patch } } : s));
   const shown = sheet ? sheetState(data, cart, sheet.pick) : null;
+  const pagePatch = (patch: Partial<SheetPick>) => setPagePick((s) => (s ? { ...s, ...patch } : s));
+  const paged = view === "produk" && pagePick ? sheetState(data, cart, pagePick) : null;
 
-  const addToCart = () => {
-    if (!shown || shown.size === undefined) return;
-    const { p, v, size, qty } = shown;
+  const addLine = (st: NonNullable<typeof shown>) => {
+    const { p, v, size, qty, max } = st;
+    if (size === undefined || p.soldOut || max <= 0) return false;
     const at = cart.findIndex((c) => c.productId === p.id && c.variantId === v.id && c.size === size);
     saveCart(at >= 0 ? cart.map((c, i) => (i === at ? { ...c, qty: c.qty + qty } : c)) : [...cart, { productId: p.id, variantId: v.id, size, qty }]);
-    showToast(tr("{qty} pcs masuk keranjang", { qty }));
+    return true;
+  };
+  const addToCart = () => {
+    if (!shown || !addLine(shown)) return;
+    showToast(tr("{qty} pcs masuk keranjang", { qty: shown.qty }));
     closeSheet();
+  };
+  // on the product page the buyer stays there; the toast leads to the cart
+  const addFromPage = () => {
+    if (!paged || !addLine(paged)) return;
+    pagePatch({ qty: 1 });
+    showToast(tr("{qty} pcs masuk keranjang", { qty: paged.qty }), { label: tr("Lihat keranjang"), run: () => go("keranjang") });
   };
 
   const setCode = (c: string) => {
@@ -332,7 +352,9 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
       return;
     }
     const placed: DoneOrder = { code: reply.code ?? "", waUrl: reply.waUrl ?? "", total: reply.total ?? 0, pcs: reply.pcs ?? 0, tier: !!reply.tier, promo: reply.promo ?? null,
-      at: Date.now(), home: homeRef.current || "/" };
+      at: Date.now(), home: homeRef.current || "/",
+      ...(Array.isArray(reply.items) ? { items: reply.items.slice(0, 50).map(({ name, variant, size, qty, price }) => ({ name, variant, size, qty, price })) } : {}),
+      ...(typeof reply.subtotal === "number" ? { subtotal: reply.subtotal } : {}), ...(reply.message ? { message: reply.message } : {}) };
     // the shop priced it with its latest prices and promo; say so when that differs from what the cart showed
     const shown = cartTotal(data, cart) - (quote && quote.subtotal === cartTotal(data, cart) && quote.promo ? quote.promo.amount : 0);
     if (reply.total !== undefined && reply.total !== shown) showToast(tr("Harga sudah diperbarui toko. Total pesananmu {total}.", { total: rp(reply.total) }));
@@ -350,7 +372,17 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   const pcs = cartPcs(cart);
 
   let content: ReactNode = null;
-  if (!ready) content = null;
+  // the product page also renders on the server (its content does not depend on browser storage until the cart loads)
+  if (view === "produk" && paged && !closed) {
+    content = (
+      <ProductPage state={paged} onBack={() => go("katalog")}
+        onVariant={(id) => pagePatch({ variantId: id, size: paged.size, qty: 1 })}
+        onSize={(size) => pagePatch({ size, qty: 1 })}
+        onQty={(qty) => pagePatch({ size: paged.size, qty })}
+        onView={(i) => setViewer({ productId: paged.p.id, variantId: paged.v.id, start: i })}
+        onAdd={addFromPage} onShare={() => void shareProduct()} />
+    );
+  } else if (!ready) content = null;
   else if (closed) content = <div className="empty"><b>{tr("Toko sedang tutup.")}</b> {tr("Coba lagi nanti.")}</div>;
   else if (view === "keranjang") {
     content = (
@@ -367,7 +399,8 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     );
   } else if (view === "selesai" && done) {
     // Once the buyer taps through to WhatsApp, the done view has done its job: a later visit starts fresh.
-    content = <Done order={done} shop={data.shop} onWa={() => session.set(doneKey(slug), null)} onNew={() => go("katalog")} />;
+    content = <Done order={done} shop={data.shop} whatsapp={data.whatsapp} payment={data.payment ?? null} onWa={() => session.set(doneKey(slug), null)} onNew={() => go("katalog")}
+      onToast={showToast} onZoom={(url) => setViewer({ productId: "", start: 0, media: [{ url, type: "image" }], caption: tr("QRIS {shop}", { shop: data.shop }) })} />;
   } else {
     const save = cartBase(data, cart) - cartTotal(data, cart);
     content = (
@@ -388,6 +421,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
 
   const viewed = viewer ? findProduct(data, viewer.productId) : undefined;
   const viewedVariant = viewed ? variantOf(viewed, viewer?.variantId) : undefined;
+  const viewMedia = viewer?.media ?? (viewed ? mediaOf(viewed, viewedVariant) : []);
 
   return (
     <>
@@ -415,7 +449,7 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
           </div>
         </div>
       </header>
-      <main key={nav} className={ready ? "wrap enter" : "wrap"} id="main" aria-live="polite">{content}</main>
+      <main key={nav} className={ready ? `wrap enter v-${view}` : `wrap v-${view}`} id="main" aria-live="polite">{content}</main>
       {ready && !closed ? <div className="wrap foot-wrap">{<ShopFooter data={data} />}</div> : null}
       </div>
       <div id="sheet-root">
@@ -438,9 +472,11 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
         ) : null}
       </div>
       <div id="viewer-root">
-        {viewer && viewed && mediaOf(viewed, viewedVariant).length ? (
+        {viewer && viewer.media && viewMedia.length ? (
+          <Viewer title={viewer.caption || ""} caption={viewer.caption || ""} price="" media={viewMedia} start={viewer.start} onClose={() => setViewer(null)} />
+        ) : viewer && viewed && viewMedia.length ? (
           <Viewer title={viewed.name} caption={`${viewed.name}${viewedVariant?.name ? " · " + viewedVariant.name : ""}`} price={rp(unitPrice(viewed, pcs))}
-            media={mediaOf(viewed, viewedVariant)} start={viewer.start} onClose={() => setViewer(null)} />
+            media={viewMedia} start={viewer.start} onClose={() => setViewer(null)} />
         ) : null}
       </div>
     </>
