@@ -11,7 +11,7 @@ import {
 } from "@/lib/store";
 import { Mark } from "./Mark";
 import { Cart, shipCost, type Checkout, type ShipCtx } from "./store/Cart";
-import { sameOpt, type ShipPick } from "./store/Shipping";
+import { cartWeightKg, quotaNote, RECENT_MAX, sameOpt, type ShipPick } from "./store/Shipping";
 import { hasReturns, Perks, ReturnsSheet } from "./store/Steps";
 import { Catalog, featured, isSoldOut, ShopFooter } from "./store/Catalog";
 import { Done } from "./store/Done";
@@ -20,8 +20,30 @@ import { Viewer } from "./store/Viewer";
 import { tr } from "@/lib/i18n";
 import { LangSwitch } from "@/lib/i18n/LangSwitch";
 
-/** The last shipping destination picked, remembered with the buyer's details. */
+/** The buyer's last shipping destinations (newest first, at most RECENT_MAX), remembered with their details. */
 const destKey = "toko.dest";
+/** Shipping prices already asked this session, per destination and whole-kg weight (sessionStorage). */
+const shipCacheKey = (slug: string) => `toko.shipq.${slug}`;
+/** Live ongkir paused this session (allowance used up / asked too often) until a time. */
+const shipDownKey = (slug: string) => `toko.shipdown.${slug}`;
+/** A remembered price is used for this long; the order is re-priced by the shop anyway. */
+const SHIP_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const SHIP_CACHE_MAX = 12;
+type ShipCache = Record<string, { q: ShipQuote; at: number }>;
+const shipKeyOf = (id: Destination["id"], kg: number) => `${id}|${kg}`;
+/** Older versions kept one destination; now a short list. */
+function readRecent(v: unknown): Destination[] {
+  const list = Array.isArray(v) ? v : v ? [v] : [];
+  return list.filter((d): d is Destination => !!d && typeof d === "object" && (d as Destination).id != null && typeof (d as Destination).label === "string").slice(0, RECENT_MAX);
+}
+/** Free shipping and the minimum spend worked out for this cart's goods total, so a changed cart needs no new price. */
+function withFree(q: ShipQuote, data: StoreData, goods: number): ShipQuote {
+  if (!q.freeArea) return q;
+  const area = data.shipping?.freeAreas?.find((a) => a.name === q.freeArea);
+  const left = area ? Math.max(0, area.minSpend - goods) : Math.max(0, Number(q.minSpendLeft) || 0);
+  const { minSpendLeft: _, ...rest } = q;
+  return { ...rest, free: left === 0, ...(left > 0 ? { minSpendLeft: left } : {}) };
+}
 /** Products listed in a shared catalog message. */
 const SHARE_MAX = 10;
 
@@ -80,8 +102,11 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   // Live shipping prices (RajaOngkir through the POS): destination, the shop's quote for it, the courier picked.
   // shipDown: why it is not working right now; the order then goes without shipping and the shop tells the cost.
   const [dest, setDestState] = useState<Destination | null>(null);
-  const [shipQ, setShipQ] = useState<{ key: string; q: ShipQuote } | null>(null);
-  const [shipLoading, setShipLoading] = useState(false);
+  const [recent, setRecent] = useState<Destination[]>([]);
+  const [shipCache, setShipCache] = useState<ShipCache>({});
+  // the destination|kg being priced right now ("" = none)
+  const [shipLoading, setShipLoading] = useState("");
+  const shipLoadingRef = useRef("");
   const [shipPick, setShipPick] = useState<ShipPick | null>(null);
   const [shipDown, setShipDown] = useState("");
   // Catalog category / sort / filter, kept here so a trip to the cart and back keeps the same list.
@@ -109,6 +134,10 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
   cartRef.current = cart;
   const buyerRef = useRef(buyer);
   buyerRef.current = buyer;
+  const codeRef = useRef("");
+  codeRef.current = code;
+  const phoneRef = useRef("");
+  phoneRef.current = buyer.phone.replace(/\D/g, "");
   const refCode = useRef<string | null>(null);
   refCode.current = ref?.code ?? null;
 
@@ -176,8 +205,13 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     local.set(cartKey(slug), clamped);
     setCart(clamped);
     setBuyer(loadBuyer());
-    const dd = local.get<Destination | null>(destKey, null);
-    if (dd && dd.id != null && typeof dd.label === "string") setDestState(dd);
+    const rec = readRecent(local.get<unknown>(destKey, null));
+    setRecent(rec);
+    if (rec[0]) setDestState(rec[0]);
+    const sc = session.get<ShipCache>(shipCacheKey(slug), {});
+    if (sc && typeof sc === "object") setShipCache(Object.fromEntries(Object.entries(sc).filter(([, v]) => v && v.q && Array.isArray(v.q.options) && Date.now() - v.at < SHIP_CACHE_TTL_MS)));
+    const down = session.get<{ why: string; until: number } | null>(shipDownKey(slug), null);
+    if (down && down.until > Date.now() && typeof down.why === "string") setShipDown(down.why);
     setCodeState(session.get<string>(codeKey(slug), "") || "");
     // A just-placed order comes back (e.g. after the jump to WhatsApp) only on the store page it was placed on, without
     // a product in the link, and for DONE_TTL_MS; any other page forgets it.
@@ -332,46 +366,72 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     return () => { live = false; clearTimeout(t); };
   }, [wantsQuote, api, slug, cart, code, phoneDigits]);
 
-  // Shipping quote for the cart to the chosen destination, asked again whenever the cart or destination changes.
-  const shipLive = data.shipping?.provider === "rajaongkir" && !shipDown;
-  const wantsShip = ready && view === "keranjang" && cart.length > 0 && shipLive && buyer.delivery === "ship" && !!dest;
-  const shipKey = wantsShip && dest ? JSON.stringify([dest.id, cart, ref?.code ?? ""]) : "";
-  useEffect(() => {
-    if (!shipKey || !dest) { setShipLoading(false); return; }
-    let live = true;
-    setShipLoading(true);
-    const t = setTimeout(async () => {
-      try {
-        const r = await fetch(`${api}/api/public/stores/${slug}/shipping/quote`, {
-          method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-          body: JSON.stringify({ destinationId: dest.id, items: cartRef.current, ...(refCode.current ? { ref: refCode.current } : {}) }),
-        });
-        if (!live) return;
-        // 429: asked too often; keep what is shown
-        if (r.status === 429) { setShipLoading(false); return; }
-        const j = (await r.json().catch(() => null)) as ShipQuote | null;
-        if (!r.ok || !j || !Array.isArray(j.options)) throw new Error(String(r.status));
-        setShipQ({ key: shipKey, q: j });
-        setShipLoading(false);
-      } catch (e) {
-        if (!live) return;
-        setShipLoading(false);
-        setShipDown((e as Error)?.name === "TimeoutError" ? tr("Cek ongkir sedang lambat.") : tr("Cek ongkir sedang tidak bisa dipakai."));
-      }
-    }, 300);
-    return () => { live = false; clearTimeout(t); };
-  }, [shipKey, dest, api, slug]);
-  const shipQuote = shipQ && shipQ.key === shipKey ? shipQ.q : shipQ && shipLoading && dest && JSON.parse(shipQ.key)[0] === dest.id ? shipQ.q : null;
+  // Shipping price for the cart to the chosen destination. The shop's RajaOngkir allowance is small (~100 a day), so a
+  // price is asked once per destination and whole-kg weight: on picking a destination, else only when the buyer taps
+  // "Cek ongkir" / "Cek ulang". Free shipping and the minimum spend are worked out here from the cart.
+  const shipOn = data.shipping?.provider === "rajaongkir" && data.shipping.quota !== "out";
+  const shipLive = shipOn && !shipDown;
+  const kg = cartWeightKg(data, cart);
+  const goods = cartTotal(data, cart) - (quote && quote.subtotal === cartTotal(data, cart) && quote.promo ? quote.promo.amount : 0);
+  /** A remembered price for (destination, kg); a free area without couriers is the same at any weight. */
+  const cachedShip = (cache: ShipCache, id: Destination["id"], w: number) =>
+    cache[shipKeyOf(id, w)]?.q ?? Object.entries(cache).find(([k, v]) => k.startsWith(`${id}|`) && v.q.freeArea && !v.q.options.length)?.[1].q ?? null;
+  const rawShip = dest ? cachedShip(shipCache, dest.id, kg) : null;
+  const shipQuote = rawShip ? withFree(rawShip, data, goods) : null;
+  // no price for this weight, but one for another: the parcel got heavier or lighter since
+  const lastOther = dest && !rawShip ? Object.entries(shipCache).filter(([k]) => k.startsWith(`${dest.id}|`)).sort((a, b) => b[1].at - a[1].at)[0] : undefined;
+  const shipStale: "up" | "down" | null = lastOther ? (Number(lastOther[0].split("|").pop()) < kg ? "up" : "down") : null;
+  const shipBusy = !!dest && shipLoading === shipKeyOf(dest.id, kg);
   const shipOption = shipQuote && shipPick ? shipQuote.options.find((o) => sameOpt(shipPick, o)) ?? null : null;
+
+  /** Live ongkir stops for now (the order goes without it); with retryMs it stays off this long, across reloads. */
+  const downFor = (why: string, retryMs?: number) => {
+    setShipDown(why);
+    if (retryMs) session.set(shipDownKey(slug), { why, until: Date.now() + retryMs });
+  };
+  /** Asks the shop once for the price of this cart to `d` (weight `w` kg) and remembers it. */
+  const askShip = async (d: Destination, w: number) => {
+    const k = shipKeyOf(d.id, w);
+    if (shipLoadingRef.current === k) return;
+    shipLoadingRef.current = k;
+    setShipLoading(k);
+    try {
+      const r = await fetch(`${api}/api/public/stores/${slug}/shipping/quote`, {
+        method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        // code + phone: the shop counts the promo toward a free area's minimum spend
+        body: JSON.stringify({ destinationId: d.id, items: cartRef.current, ...(refCode.current ? { ref: refCode.current } : {}),
+          ...(codeRef.current ? { code: codeRef.current } : {}), ...(phoneRef.current ? { phone: phoneRef.current } : {}) }),
+      });
+      const quota = await quotaNote(r);
+      if (quota) { downFor(quota.why, quota.retryMs); return; }
+      const j = (await r.json().catch(() => null)) as ShipQuote | null;
+      if (!r.ok || !j || !Array.isArray(j.options)) throw new Error(String(r.status));
+      setShipCache((c) => {
+        const next = Object.fromEntries([...Object.entries(c).filter(([x]) => x !== k).sort((a, b) => a[1].at - b[1].at).slice(-(SHIP_CACHE_MAX - 1)), [k, { q: j, at: Date.now() }]]);
+        session.set(shipCacheKey(slug), next);
+        return next;
+      });
+    } catch (e) {
+      setShipDown((e as Error)?.name === "TimeoutError" ? tr("Cek ongkir sedang lambat.") : tr("Cek ongkir sedang tidak bisa dipakai."));
+    } finally {
+      if (shipLoadingRef.current === k) { shipLoadingRef.current = ""; setShipLoading(""); }
+    }
+  };
   const setDest = (d: Destination | null) => {
     orderId.current = null;
     setDestState(d);
-    local.set(destKey, d ? { id: d.id, label: d.label, free: !!d.free } : null);
-    if (!d || d.id !== dest?.id) { setShipPick(null); setShipQ(null); }
+    if (!d || d.id !== dest?.id) setShipPick(null);
+    if (!d) return;
+    const rec = [{ id: d.id, label: d.label, free: !!d.free }, ...recent.filter((x) => String(x.id) !== String(d.id))].slice(0, RECENT_MAX);
+    setRecent(rec);
+    local.set(destKey, rec);
+    // the first price for a destination comes with picking it (one request); a remembered one costs nothing
+    if (shipLive && !cachedShip(shipCache, d.id, kg)) askShip(d, kg);
   };
-  const shipCtx: ShipCtx | undefined = data.shipping?.provider === "rajaongkir" ? {
-    live: shipLive, down: shipDown, api, slug, dest, onDest: setDest, quote: shipQuote, loading: shipLoading || (!!shipKey && !shipQuote),
-    pick: shipPick, onPick: (p) => { orderId.current = null; setShipPick(p); }, onDown: setShipDown, option: shipQuote && !shipLoading ? shipOption : null,
+  const shipCtx: ShipCtx | undefined = shipOn ? {
+    live: shipLive, down: shipDown, api, slug, dest, onDest: setDest, quote: shipQuote, loading: shipBusy,
+    stale: shipStale, onCheck: () => { if (dest) askShip(dest, kg); }, recent, limited: data.shipping?.quota === "low",
+    pick: shipPick, onPick: (p) => { orderId.current = null; setShipPick(p); }, onDown: downFor, option: shipQuote && !shipBusy ? shipOption : null,
   } : undefined;
 
   const updateBuyer = (patch: Partial<Buyer>) => {
@@ -390,7 +450,10 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     const ship = buyer.delivery === "ship";
     // the shop re-prices the shipping itself; only the choice is sent
     const opt = ship ? shipCtx?.option : null;
-    const shipping = opt && dest ? { destinationId: dest.id, destinationLabel: dest.label, courier: opt.courier, service: opt.service } : null;
+    // a free area without couriers sends only the destination: the shop marks the order as shipping free
+    const shipping = !ship || !dest || !shipCtx?.live ? null
+      : opt ? { destinationId: dest.id, destinationLabel: dest.label, courier: opt.courier, service: opt.service }
+      : shipCtx.quote?.free ? { destinationId: dest.id, destinationLabel: dest.label, courier: "", service: "" } : null;
     let res: Response;
     let reply: OrderReply = {};
     const send = async (withShip: boolean) => {
@@ -406,7 +469,12 @@ export function Storefront({ data: initial, api, base, initialProduct }: Props) 
     try {
       await send(true);
       // the shop could not price the shipping just now: the order still goes, the shop tells the cost on WhatsApp
-      if (shipping && !res!.ok && res!.status >= 500) { setShipDown(tr("Cek ongkir sedang tidak bisa dipakai.")); await send(false); }
+      // (a shop that wants a courier for every shipped order refuses one without; it goes without shipping too)
+      if (shipping && !res!.ok && (res!.status >= 500 || (!shipping.courier && res!.status === 409))) {
+        if (res!.status === 503 && (reply as { quota?: string }).quota === "out") downFor(tr("Kuota cek ongkir toko hari ini sudah habis."), 60 * 60 * 1000);
+        else setShipDown(tr("Cek ongkir sedang tidak bisa dipakai."));
+        await send(false);
+      }
     } catch (e) {
       setBusy(false);
       // Sending again is safe: the order id makes the shop recognise a repeat instead of doubling it.
