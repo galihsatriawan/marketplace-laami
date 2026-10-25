@@ -546,8 +546,11 @@ button.deal:hover{border-color:var(--hue)}
 .row-scroll{display:grid;grid-auto-flow:column;grid-auto-columns:min(42vw,200px);gap:10px;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x mandatory;scroll-padding-inline:var(--gutter);
   margin:0 calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter));padding:2px var(--gutter-r) 6px var(--gutter)}
 .row-scroll::-webkit-scrollbar{display:none}
-.row-scroll > .cat-card{scroll-snap-align:start}
-.row-scroll .cat-card:hover{transform:none}
+/* row cards look like grid cards (own class so each product is one .cat-card on the page) */
+.cat-card-r{position:relative;display:flex;flex-direction:column;text-align:left;padding:0;border:1px solid var(--border);border-radius:18px;background:var(--surface);overflow:hidden;cursor:pointer;min-width:0;scroll-snap-align:start;font:inherit;color:inherit;transition:box-shadow .25s,border-color .2s}
+.cat-card-r:hover{box-shadow:var(--card-shadow);border-color:transparent}
+.cat-card-r:active{transform:scale(.98)}
+.cat-card-r:hover .cat-img img{transform:scale(1.04)}
 @media (min-width:1272px){.row-scroll{margin:0;padding:2px 0 6px;grid-auto-columns:200px}}
 .rank{position:absolute;left:8px;bottom:2px;z-index:1;font-size:54px;line-height:1;font-weight:800;letter-spacing:-.06em;color:#fff;
   -webkit-text-stroke:1.5px rgba(17,20,18,.55);text-shadow:0 2px 12px rgba(0,0,0,.25);font-variant-numeric:tabular-nums;pointer-events:none}
@@ -558,7 +561,7 @@ button.deal:hover{border-color:var(--hue)}
 .tag-b.new{background:var(--hue-soft);color:var(--hue-ink)}
 .tag-b.out{background:var(--pill-neu-bg);color:var(--pill-neu-ink)}
 /* sold out: still opens (to look), dimmed and last in every sort */
-.cat-card.is-out .cat-img img{filter:grayscale(.85);opacity:.55}
+.cat-card-r.is-out .cat-img img,.cat-card.is-out .cat-img img{filter:grayscale(.85);opacity:.55}
 .cat-card.is-out .cat-body{opacity:.62}
 .cat-card.is-out:hover{transform:none;box-shadow:none;border-color:var(--border)}
 .out-note{font-size:12px;font-weight:700;color:var(--muted)}

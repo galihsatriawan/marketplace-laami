@@ -51,7 +51,8 @@ export function Catalog({ data, query, via, onProduct, onClearQuery, browse, onB
   const sizes = (data.sizes || []).filter((z) => data.products.some((p) => sizesOf(data, p).includes(z)));
   const anyTier = data.products.some((p) => tiersOf(p).length);
   const cats = data.categories?.length ? data.categories : [...new Set(data.products.map((p) => p.category || "").filter(Boolean))].sort((a, b) => a.localeCompare(b, "id"));
-  const anyOther = cats.length > 0 && data.products.some((p) => !p.category);
+  // "Lainnya" only when an uncategorised product can still be bought: a tab of only sold-out items helps nobody
+  const anyOther = cats.length > 0 && data.products.some((p) => !p.category && !isSoldOut(p));
   const subs = cat && cat !== OTHER ? data.subcategories?.[cat] || [] : [];
   const inCat = (p: Product) => !cat || (cat === OTHER ? !p.category : p.category === cat && (!sub || p.subcategory === sub));
   const list = data.products
@@ -77,7 +78,9 @@ export function Catalog({ data, query, via, onProduct, onClearQuery, browse, onB
   const live = data.products.filter((p) => !isSoldOut(p));
   const best = live.filter((p) => p.bestseller).sort((a, b) => (a.bestsellerRank || 99) - (b.bestsellerRank || 99)).slice(0, ROW_MAX);
   const fresh = live.filter((p) => p.isNew).slice(0, ROW_MAX);
-  const rows = plain ? ([["best", tr("Terlaris"), best], ["new", tr("Baru datang"), fresh]] as const).filter(([, , ps]) => ps.length >= ROW_MIN) : [];
+  // a row that would repeat (nearly) the whole catalog, e.g. a new shop where everything is new, is left out
+  const rows = plain ? ([["best", tr("Terlaris"), best], ["new", tr("Baru datang"), fresh]] as const)
+    .filter(([, , ps]) => ps.length >= ROW_MIN && ps.length < live.length) : [];
 
   return (
     <>
@@ -121,7 +124,7 @@ export function Catalog({ data, query, via, onProduct, onClearQuery, browse, onB
           {deals.slice(0, 3).map((p, i) => {
             const terms = promoTerms(p);
             return (
-              <div className="deal" role="listitem" key={i}>
+              <div className="deal promo-deal" role="listitem" key={i}>
                 <i className="deal-ic" aria-hidden="true"><Pct /></i>
                 <div><b>{promoTitle(p)} <span className="deal-k">{p.name}</span></b><span>{terms || tr("Otomatis terpotong di keranjang.")}</span></div>
               </div>
@@ -154,7 +157,7 @@ export function Catalog({ data, query, via, onProduct, onClearQuery, browse, onB
         <section className="home-row" key={k} data-row={k} aria-label={title}>
           <h2>{title}</h2>
           <div className="row-scroll">
-            {ps.map((p, i) => <Card key={p.id} data={data} p={p} eager={false} first={false} onProduct={onProduct} rank={k === "best" ? i + 1 : undefined} />)}
+            {ps.map((p, i) => <Card key={p.id} data={data} p={p} eager={false} first={false} onProduct={onProduct} rank={k === "best" ? i + 1 : undefined} row />)}
           </div>
         </section>
       ))}
@@ -215,7 +218,8 @@ function badgesOf(p: Product) {
 }
 
 /** One product card, in the grid and in the home rows. A sold-out card still opens the product to look at. */
-function Card({ data, p, eager, first, onProduct, rank }: { data: StoreData; p: Product; eager: boolean; first: boolean; onProduct: (id: string) => void; rank?: number }) {
+function Card({ data, p, eager, first, onProduct, rank, row }: { data: StoreData; p: Product; eager: boolean; first: boolean; onProduct: (id: string) => void; rank?: number;
+  /** In a home row: its own class, so ".cat-card" stays one card per product (the grid). */ row?: boolean }) {
   const img = cover(p);
   const out = isSoldOut(p);
   const hint = out ? "" : tierHint(p);
@@ -223,7 +227,7 @@ function Card({ data, p, eager, first, onProduct, rank }: { data: StoreData; p: 
   const moreVariants = p.variants.length - swatches.length;
   const sz = sizesOf(data, p);
   return (
-    <button className={out ? "cat-card is-out" : "cat-card"} data-act="product" data-id={p.id} data-out={out ? "1" : undefined} onClick={() => onProduct(p.id)}
+    <button className={`${row ? "cat-card-r" : "cat-card"}${out ? " is-out" : ""}`} data-act={row ? "row-product" : "product"} data-id={p.id} data-out={out ? "1" : undefined} onClick={() => onProduct(p.id)}
       aria-label={out ? `${p.name}, ${tr("stok habis")}` : undefined}>
       <div className="cat-img">
         {img ? <img src={img} alt="" width={400} height={500} sizes={rank ? "(min-width:900px) 200px, 42vw" : "(min-width:1280px) 240px, (min-width:1024px) 25vw, (min-width:640px) 33vw, 50vw"}
