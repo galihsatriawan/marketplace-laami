@@ -19,13 +19,17 @@ export const DEFAULT_WEIGHT_G = 300;
 /** Recent destinations offered as one-tap chips. */
 export const RECENT_MAX = 3;
 
-/** Parcel weight in whole kg (what couriers charge by): Σ qty × grams per pcs, rounded up, at least 1. */
+/**
+ * Parcel weight in whole kg (what couriers charge by), as the shop works it out: Σ qty × grams per pcs, plus the shop's
+ * packaging grams once per order (newer POS: shipping.packagingGrams), rounded up, at least 1.
+ */
 export function cartWeightKg(data: StoreData, cart: CartLine[]) {
   const g = cart.reduce((a, c) => {
     const w = Number(findProduct(data, c.productId)?.weight);
     return a + (Number.isFinite(w) && w > 0 ? w : DEFAULT_WEIGHT_G) * (Number(c.qty) || 0);
   }, 0);
-  return Math.max(1, Math.ceil(g / 1000));
+  const pack = Number(data.shipping?.packagingGrams);
+  return Math.max(1, Math.ceil((g > 0 && Number.isFinite(pack) && pack > 0 ? g + pack : g) / 1000));
 }
 
 /** Why live ongkir stopped, from a failed answer: 503 with quota "out" (allowance used up) or 429 (asked too often). */
