@@ -3,10 +3,10 @@ import { flushSync } from "react-dom";
 import type { Destination, Quote, ShipQuote, StoreData } from "@/lib/pos";
 import { tr } from "@/lib/i18n";
 import { rpShort } from "./ProductSheet";
-import { fmtEtd, optCost, ShipBox, type ShipPick } from "./Shipping";
+import { fmtEtd, optCost, optRaw, ShipBox, type ShipPick } from "./Shipping";
 import { areaNames, freeAreas, Truck } from "./Steps";
 import {
-  cartBase, cartPcs, cartTotal, cover, findProduct, nextTier, normBrand, num, rp, unitPrice, variantCover, wasPrice, variantOf,
+  cartBase, cartPcs, cartSubsidy, cartTotal, cover, findProduct, nextTier, normBrand, num, rp, unitPrice, variantCover, wasPrice, variantOf,
   type Buyer, type CartLine, type Delivery, type View,
 } from "@/lib/store";
 
@@ -43,9 +43,12 @@ export type ShipCtx = {
   /** The picked option in the current quote (null when none / stale). */
   option: ShipQuote["options"][number] | null;
 };
-/** What the buyer pays for shipping right now; null = not known (the shop tells it). */
+/** What the buyer pays for shipping right now (after the ongkir subsidy); null = not known (the shop tells it). */
 export const shipCost = (s: ShipCtx | undefined, delivery: Delivery) =>
   !s?.live || delivery !== "ship" || !s.quote ? null : s.quote.free ? 0 : s.option ? optCost(s.quote, s.option) : null;
+/** The courier's price before the subsidy; null = not known. */
+const shipRaw = (s: ShipCtx | undefined, delivery: Delivery) =>
+  !s?.live || delivery !== "ship" || !s.quote ? null : s.quote.free ? 0 : s.option ? optRaw(s.quote, s.option) : null;
 type Props = {
   ship?: ShipCtx;
   data: StoreData; cart: CartLine[]; buyer: Buyer; busy: boolean;
@@ -114,6 +117,12 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
   const promo = fresh ? quote!.promo : null;
   const ship = buyer.delivery === "ship";
   const ongkir = shipCost(sc, buyer.delivery);
+  const ongkirRaw = shipRaw(sc, buyer.delivery);
+  // ongkir subsidy: exact once a courier is picked; before that (or when the shop tells the cost) "up to" the local max
+  const sub = cartSubsidy(data, cart, ship);
+  const subOff = ongkir !== null && ongkirRaw !== null ? ongkirRaw - ongkir : 0;
+  const subUpTo = ongkir === null && sub.max > 0 ? sub.max : 0;
+  const subWhy = sub.rate ? tr("{pcs} pcs × {rp}", { pcs, rp: rp(sub.rate) }) : "";
   const pay = total - (promo?.amount || 0) + (ongkir || 0);
   const off = promo?.amount || 0;
   useEffect(() => {
@@ -189,6 +198,7 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
               );
             })}
           </ul>
+          {ship && sub.left > 0 ? <div className="tier-note sub-note" id="co-sub-nudge">{tr("Tambah {n} pcs lagi untuk potongan ongkir", { n: sub.left })}</div> : null}
           {next ? <div className="tier-note">{tr("Tambah")} {next.min - pcs} {tr("pcs lagi (boleh campur model) supaya {name} jadi {price}/pcs.", { name: next.name, price: rp(next.price) })}</div> : null}
         </section>
 
@@ -258,9 +268,12 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
                 {save > 0 ? <div className="ln"><span className="k">{tr("Hemat harga grosir")}</span><span className="money" style={{ color: "var(--hue)" }}>−{rp(save)}</span></div> : null}
                 {promo ? <div className={flash ? "ln promo-ln flash" : "ln promo-ln"} key={`promo-${flash}`} id="co-promo"><span className="k">{tr("Promo {name}", { name: promo.name })}{promo.code ? <span className="code-tag">{promo.code}</span> : null}</span><span className="money">−{rp(promo.amount)}</span></div> : null}
                 <div className="ln" id="co-ongkir"><span className="k">{tr("Ongkir")}{ongkir !== null && sc?.option ? <span className="ln-sub"> · {sc.option.courierName || sc.option.courier.toUpperCase()} {sc.option.service}{fmtEtd(sc.option.etd) ? ` (${fmtEtd(sc.option.etd)})` : ""}</span> : null}</span>
-                  <span className={ongkir === 0 ? "money free" : "money"}>{!ship ? tr("tidak ada") : ongkir === 0 ? tr("Gratis") : ongkir !== null ? rp(ongkir) : sc?.live ? (!sc.dest ? (sc.limited ? tr("dikabari toko") : tr("pilih tujuan")) : !sc.quote ? (sc.loading ? tr("menghitung…") : tr("cek ongkir")) : sc.quote.options.length ? tr("pilih kurir") : tr("dikabari toko")) : tr("dikabari toko")}</span></div>
+                  <span className={ongkir === 0 && !subOff ? "money free" : "money"}>{!ship ? tr("tidak ada") : ongkir === 0 && !subOff ? tr("Gratis") : ongkirRaw !== null ? rp(ongkirRaw) : sc?.live ? (!sc.dest ? (sc.limited ? tr("dikabari toko") : tr("pilih tujuan")) : !sc.quote ? (sc.loading ? tr("menghitung…") : tr("cek ongkir")) : sc.quote.options.length ? tr("pilih kurir") : tr("dikabari toko")) : tr("dikabari toko")}</span></div>
+                {subOff > 0 ? <div className="ln sub-ln" id="co-sub"><span className="k">{tr("Potongan ongkir")}{subWhy ? <span className="ln-sub"> · {subWhy}</span> : null}</span><span className="money">−{rp(subOff)}</span></div>
+                  : subUpTo > 0 ? <div className="ln sub-ln" id="co-sub"><span className="k">{sc?.live && !sc.down ? tr("Dapat potongan ongkir s/d {rp}", { rp: rp(subUpTo) }) : tr("Dapat potongan ongkir s/d {rp} (dikonfirmasi toko)", { rp: rp(subUpTo) })}{subWhy ? <span className="ln-sub"> · {subWhy}</span> : null}</span></div> : null}
                 <div className="ln tot"><span>{tr("Total")}</span><span className="money" id="co-total">{rp(pay)}</span></div>
                 {save + off > 0 ? <div className="ln saved"><span>{tr("Kamu hemat {rp}", { rp: rp(save + off) })}</span></div> : null}
+                {subOff > 0 ? <div className="ln saved sub-got" id="co-sub-got"><span>{ongkir === 0 ? tr("Ongkirmu gratis berkat potongan ongkir") : tr("Kamu dapat potongan ongkir {rp}", { rp: rp(subOff) })}</span></div> : null}
               </div>
               <button ref={submitRef} className="btn pri lg full" type="submit" disabled={busy}>{busy ? tr("Mengirim…") : tr("Pesan lewat WhatsApp")}</button>
             </form>
@@ -269,7 +282,7 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
       </div>
       {/* phones: the total and the order button stay in reach while the buyer scrolls the cart and the form */}
       <div className={formBtnSeen ? "co-bar off" : "co-bar"} aria-hidden={formBtnSeen || undefined}>
-        <div className="co-bar-t"><span className="small">{tr("Total")}{off || save ? <span className="co-bar-save"> · {tr("hemat {rp}", { rp: rpShort(save + off) })}</span> : null}</span><b className="money" id="co-bar-total">{rp(pay)}</b></div>
+        <div className="co-bar-t"><span className="small">{tr("Total")}{off || save || subOff ? <span className="co-bar-save"> · {tr("hemat {rp}", { rp: rpShort(save + off + subOff) })}</span> : null}</span><b className="money" id="co-bar-total">{rp(pay)}</b></div>
         <button type="submit" form="checkout" className="btn pri" data-act="co-bar-send" disabled={busy} tabIndex={formBtnSeen ? -1 : undefined}>{busy ? tr("Mengirim…") : tr("Pesan lewat WhatsApp")}</button>
       </div>
     </>

@@ -38,6 +38,8 @@ export interface StoreData {
     description?: string;
     /** v2: grams per pcs for the shipping weight; absent = the storefront assumes DEFAULT_WEIGHT_G. */
     weight?: number;
+    /** Ongkir subsidy for this product in Rp per pcs (0 = none); absent = the shop's default `shipping.subsidy.perPcs`. */
+    shipSubsidy?: number;
     variants: { id: string; name: string; media: { url: string; type: "image" | "video" }[]; stock: Record<string, number> }[] }[];
 }
 /** The shop's payment methods as the public catalog lists them; account numbers are the shop's own, published on purpose. */
@@ -56,17 +58,31 @@ export interface FreeArea { name: string; minSpend: number }
 export type ShipQuota = "ok" | "low" | "out";
 export interface StoreShipping { provider: "manual" | "rajaongkir"; freeAreas: FreeArea[]; badge: boolean;
   /** Older POS versions send none (= "ok"). */
-  quota?: ShipQuota }
+  quota?: ShipQuota;
+  /** "Subsidi ongkir": the shop takes Rp per pcs off the courier cost; null / absent = none (or an older POS). */
+  subsidy?: ShipSubsidy | null }
+/** Shipping discount per pcs (perPcs = the default rate; products carry their own resolved `shipSubsidy`).
+ *  maxPerOrder 0 = no cap; minPcs: pcs in the order before it applies; resellerLinks: also on reseller (?ref) links. */
+export interface ShipSubsidy { perPcs: number; maxPerOrder: number; minPcs: number; resellerLinks: boolean }
 /** A place a parcel can go, from the shop's destination search. free: inside one of the shop's free-shipping areas. */
 export interface Destination { id: number | string; label: string; district?: string; city?: string; province?: string; zip?: string; free?: boolean }
 /** One courier service with its price for this cart. */
-export interface ShipOption { courier: string; courierName: string; service: string; description: string; cost: number; etd: string }
+export interface ShipOption { courier: string; courierName: string; service: string; description: string; cost: number; etd: string;
+  /** Newer POS with a subsidy: what the buyer pays for this option (cost − subsidy). */
+  pay?: number }
 /** The shop's shipping price for a cart to one destination. free: the order ships free (minSpend met). */
 export interface ShipQuote { weight: number; free: boolean; freeArea?: string; minSpendLeft?: number; options: ShipOption[];
   /** Newer POS: the parcel weight it priced (whole kg), the allowance left, and whether the price came from its cache. */
-  weightKg?: number; quota?: ShipQuota; cached?: boolean }
+  weightKg?: number; quota?: ShipQuota; cached?: boolean;
+  /** Newer POS: the most the subsidy takes off for this cart (each option's discount is min(subsidy, cost)). */
+  subsidy?: number;
+  /** Storefront only: the subsidy this cart had (worked out locally) when the price was asked; the shop's figures above
+   *  count only while the cart still has that subsidy (qty changes inside the same kg reuse the price without asking). */
+  askedSub?: number }
 /** Shipping as the shop priced it on a placed order. */
-export interface OrderShipping { destinationLabel: string; courier: string; courierName?: string; service: string; etd?: string; cost: number; free?: boolean; freeArea?: string }
+export interface OrderShipping { destinationLabel: string; courier: string; courierName?: string; service: string; etd?: string; cost: number; free?: boolean; freeArea?: string;
+  /** Newer POS: the subsidy taken off `cost`, and what the buyer pays (in the order total). */
+  subsidy?: number; pay?: number }
 /** An automatic promo as the POS lists it: "some" = only some products or categories. */
 export interface PublicPromo {
   name: string; type: "percent" | "amount"; value: number; maxOff: number; minSpend: number; minPcs: number; end: string;

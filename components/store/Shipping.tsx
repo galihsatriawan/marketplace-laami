@@ -66,8 +66,10 @@ export function fmtEtd(etd: string | undefined) {
   return t ? tr("{etd} hari", { etd: t }) : "";
 }
 export const sameOpt = (a: ShipPick | null, b: ShipOption) => !!a && a.courier === b.courier && a.service === b.service;
-/** What the buyer pays for this option: 0 when the order ships free. */
-export const optCost = (q: ShipQuote, o: ShipOption) => (q.free ? 0 : o.cost);
+/** What the buyer pays for this option: 0 when the order ships free, else the cost less the ongkir subsidy. */
+export const optCost = (q: ShipQuote, o: ShipOption) => (q.free ? 0 : typeof o.pay === "number" ? Math.min(o.pay, o.cost) : o.cost);
+/** The courier's own price for this option (before the subsidy): 0 when the order ships free. */
+export const optRaw = (q: ShipQuote, o: ShipOption) => (q.free ? 0 : o.cost);
 /** Cheapest first; the shop's own order breaks ties. */
 export const sortOpts = (os: ShipOption[]) => [...os].filter((o) => o && o.courier && o.service).sort((a, b) => a.cost - b.cost);
 
@@ -233,7 +235,9 @@ export function ShipBox({ api, slug, dest, onDest, quote, loading, stale, onChec
                   <button type="button" role="radio" aria-checked={on} key={`${o.courier}|${o.service}`} className="ship-opt" data-act="courier" data-id={`${o.courier}:${o.service}`} onClick={() => onPick({ courier: o.courier, service: o.service })}>
                     <span className="so-dot" aria-hidden="true" />
                     <span className="so-t"><b>{o.courierName || o.courier.toUpperCase()} <span className="so-svc">{o.service}</span></b><span>{[o.description && o.description !== o.service ? o.description : "", etd].filter(Boolean).join(" · ")}</span></span>
-                    <span className="so-c money">{c === 0 ? <><b className="so-free">{tr("Gratis")}</b>{o.cost > 0 ? <s>{rp(o.cost)}</s> : null}</> : <b>{rp(c)}</b>}</span>
+                    <span className="so-c money">{c === 0 ? <><b className="so-free">{tr("Gratis")}</b>{o.cost > 0 ? <s>{rp(o.cost)}</s> : null}</>
+                      : c < o.cost ? <><span className="so-was"><s>{rp(o.cost)}</s> <b>{rp(c)}</b></span><small className="so-save">{tr("hemat {rp}", { rp: rp(o.cost - c) })}</small></>
+                      : <b>{rp(c)}</b>}</span>
                   </button>
                 );
               })}
