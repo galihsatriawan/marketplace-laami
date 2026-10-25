@@ -311,7 +311,6 @@ export const EN: Record<string, string> = {
   // ===== Ongkir subsidy =====
   "Potongan ongkir": "Shipping discount",
   "Dapat potongan ongkir s/d {rp}": "Shipping discount up to {rp}",
-  "{pcs} pcs × {rp}": "{pcs} pcs × {rp}",
   "Dapat potongan ongkir s/d {rp} (dikonfirmasi toko)": "Shipping discount up to {rp} (confirmed by the store)",
   "Ongkirmu gratis berkat potongan ongkir": "Your shipping is free thanks to the shipping discount",
   "Kamu dapat potongan ongkir {rp}": "You get a {rp} shipping discount",

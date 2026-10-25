@@ -122,7 +122,6 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
   const sub = cartSubsidy(data, cart, ship);
   const subOff = ongkir !== null && ongkirRaw !== null ? ongkirRaw - ongkir : 0;
   const subUpTo = ongkir === null && sub.max > 0 ? sub.max : 0;
-  const subWhy = sub.rate ? tr("{pcs} pcs × {rp}", { pcs, rp: rp(sub.rate) }) : "";
   const pay = total - (promo?.amount || 0) + (ongkir || 0);
   const off = promo?.amount || 0;
   useEffect(() => {
@@ -269,8 +268,8 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
                 {promo ? <div className={flash ? "ln promo-ln flash" : "ln promo-ln"} key={`promo-${flash}`} id="co-promo"><span className="k">{tr("Promo {name}", { name: promo.name })}{promo.code ? <span className="code-tag">{promo.code}</span> : null}</span><span className="money">−{rp(promo.amount)}</span></div> : null}
                 <div className="ln" id="co-ongkir"><span className="k">{tr("Ongkir")}{ongkir !== null && sc?.option ? <span className="ln-sub"> · {sc.option.courierName || sc.option.courier.toUpperCase()} {sc.option.service}{fmtEtd(sc.option.etd) ? ` (${fmtEtd(sc.option.etd)})` : ""}</span> : null}</span>
                   <span className={ongkir === 0 && !subOff ? "money free" : "money"}>{!ship ? tr("tidak ada") : ongkir === 0 && !subOff ? tr("Gratis") : ongkirRaw !== null ? rp(ongkirRaw) : sc?.live ? (!sc.dest ? (sc.limited ? tr("dikabari toko") : tr("pilih tujuan")) : !sc.quote ? (sc.loading ? tr("menghitung…") : tr("cek ongkir")) : sc.quote.options.length ? tr("pilih kurir") : tr("dikabari toko")) : tr("dikabari toko")}</span></div>
-                {subOff > 0 ? <div className="ln sub-ln" id="co-sub"><span className="k">{tr("Potongan ongkir")}{subWhy ? <span className="ln-sub"> · {subWhy}</span> : null}</span><span className="money">−{rp(subOff)}</span></div>
-                  : subUpTo > 0 ? <div className="ln sub-ln" id="co-sub"><span className="k">{sc?.live && !sc.down ? tr("Dapat potongan ongkir s/d {rp}", { rp: rp(subUpTo) }) : tr("Dapat potongan ongkir s/d {rp} (dikonfirmasi toko)", { rp: rp(subUpTo) })}{subWhy ? <span className="ln-sub"> · {subWhy}</span> : null}</span></div> : null}
+                {subOff > 0 ? <div className="ln sub-ln" id="co-sub"><span className="k">{tr("Potongan ongkir")}</span><span className="money">−{rp(subOff)}</span></div>
+                  : subUpTo > 0 ? <div className="ln sub-ln" id="co-sub"><span className="k">{sc?.live && !sc.down ? tr("Dapat potongan ongkir s/d {rp}", { rp: rp(subUpTo) }) : tr("Dapat potongan ongkir s/d {rp} (dikonfirmasi toko)", { rp: rp(subUpTo) })}</span></div> : null}
                 <div className="ln tot"><span>{tr("Total")}</span><span className="money" id="co-total">{rp(pay)}</span></div>
                 {save + off > 0 ? <div className="ln saved"><span>{tr("Kamu hemat {rp}", { rp: rp(save + off) })}</span></div> : null}
                 {subOff > 0 ? <div className="ln saved sub-got" id="co-sub-got"><span>{ongkir === 0 ? tr("Ongkirmu gratis berkat potongan ongkir") : tr("Kamu dapat potongan ongkir {rp}", { rp: rp(subOff) })}</span></div> : null}
