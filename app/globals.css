@@ -72,7 +72,7 @@ h1,h2,h3{margin:0;text-wrap:balance}
 
 /* header */
 /* sticky at 0 and padded by the notch / status bar inset: a sticky offset would slide it over the page top */
-.top{position:sticky;top:0;padding-top:env(safe-area-inset-top,0px);z-index:8;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:saturate(1.4) blur(14px);border-bottom:1px solid var(--border)}
+.top{position:sticky;top:0;padding-top:0;z-index:8;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:saturate(1.4) blur(14px);border-bottom:1px solid var(--border)}
 .top-in{max-width:var(--max);margin:0 auto;padding:10px var(--gutter-r) 10px var(--gutter);display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"brand . cart" "search search search";align-items:center;gap:10px 12px}
 .brand-link{grid-area:brand;display:flex;align-items:center;gap:10px;min-width:0;background:none;border:0;padding:0;cursor:pointer;text-align:left}
 .mark{width:36px;height:36px;flex:none}
@@ -265,7 +265,7 @@ h1,h2,h3{margin:0;text-wrap:balance}
 }
 
 /* floating cart bar */
-.cartbar{position:fixed;left:12px;right:12px;margin-inline:auto;max-width:560px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:7;
+.cartbar{position:fixed;left:12px;right:12px;margin-inline:auto;max-width:560px;bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:7;
   display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 8px 8px 18px;border-radius:999px;background:var(--primary);color:var(--on-primary);box-shadow:var(--lift);animation:barIn .35s var(--ease) both}
 .cartbar .btn{background:var(--surface);color:var(--text);border-color:var(--surface)}
 @keyframes barIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
@@ -484,3 +484,7 @@ body:has(.scrim) .toast{bottom:calc(96px + env(safe-area-inset-bottom,0px))}
 .sort{height:44px;background-position:calc(100% - 18px) 20px,calc(100% - 13px) 20px}
 .back{min-height:44px}
 .lang-switch button{min-width:40px}
+
+/* iOS: the status-bar inset only matters when the shop runs from the home screen (standalone); in Safari the browser
+   already keeps the page below its own bars, and adding the inset again left an empty band above the header. */
+@media (display-mode:standalone){.top{padding-top:env(safe-area-inset-top,0px)}}
