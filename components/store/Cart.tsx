@@ -1,13 +1,27 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { flushSync } from "react-dom";
 import type { Quote, StoreData } from "@/lib/pos";
 import { tr } from "@/lib/i18n";
+import { rpShort } from "./ProductSheet";
 import {
   cartBase, cartPcs, cartTotal, cover, findProduct, nextTier, normBrand, num, rp, unitPrice, variantCover, wasPrice, variantOf,
   type Buyer, type CartLine, type Delivery, type View,
 } from "@/lib/store";
 
 export type Checkout = { name: string; phone: string; address: string };
+type Field = "name" | "phone" | "address";
+type Errors = Partial<Record<Field, string>>;
+/** What is wrong with the checkout form, field by field (empty when it can be sent). */
+export function checkoutErrors(b: Buyer): Errors {
+  const e: Errors = {};
+  if (!b.name.trim()) e.name = tr("Isi nama kamu dulu");
+  if (b.phone.replace(/\D/g, "").length < 9) e.phone = b.phone.trim() ? tr("Nomor WhatsApp belum benar. Contoh: 0812 3456 7890") : tr("Isi nomor WhatsApp yang aktif");
+  if (b.delivery === "ship" && b.address.trim().length < 10) e.address = tr("Isi alamat lengkap untuk pengiriman");
+  return e;
+}
+/** Props for an input with an inline error under it. */
+const errProps = (errs: Errors, f: Field) => (errs[f] ? { "aria-invalid": true as const, "aria-describedby": `co-${f}-err` } : {});
+const ErrMsg = ({ errs, f }: { errs: Errors; f: Field }) => (errs[f] ? <span className="f-err" id={`co-${f}-err`} role="alert">{errs[f]}</span> : null);
 type Props = {
   data: StoreData; cart: CartLine[]; buyer: Buyer; busy: boolean;
   onGo: (v: View) => void; onQty: (index: number, qty: number) => void; onClear: () => void;
@@ -24,6 +38,28 @@ const Back = ({ onGo }: { onGo: (v: View) => void }) => (
 
 export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, onToast, onPlace, code, quote, onCode }: Props) {
   const [typed, setTyped] = useState(code);
+  // the promo code field stays folded behind "Punya kode promo?" until the buyer wants it
+  const [promoOpen, setPromoOpen] = useState(!!code);
+  const [errs, setErrs] = useState<Errors>({});
+  const codeRef = useRef<HTMLInputElement>(null);
+  const submitRef = useRef<HTMLButtonElement>(null);
+  // the phone bar's button is shown while the form's own button is off screen
+  const [formBtnSeen, setFormBtnSeen] = useState(false);
+  const calcRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // hidden while the totals or the form's own button are on screen (it would cover them)
+    const els: HTMLElement[] = [];
+    if (calcRef.current) els.push(calcRef.current);
+    if (submitRef.current) els.push(submitRef.current);
+    if (!els.length || typeof IntersectionObserver === "undefined") return;
+    const seen = new Map<Element, boolean>();
+    const io = new IntersectionObserver((es) => { es.forEach((e) => seen.set(e.target, e.isIntersecting)); setFormBtnSeen([...seen.values()].some(Boolean)); }, { rootMargin: "0px 0px -60px 0px" });
+    els.forEach((x) => io.observe(x));
+    return () => io.disconnect();
+  }, [cart.length]);
+  // the promo line lights up when a discount appears or changes
+  const [flash, setFlash] = useState(0);
+  const lastOff = useRef(0);
   const nameRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const addrRef = useRef<HTMLTextAreaElement>(null);
@@ -46,22 +82,43 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
   const fresh = !!quote && quote.subtotal === total;
   const promo = fresh ? quote!.promo : null;
   const pay = total - (promo?.amount || 0);
+  const off = promo?.amount || 0;
+  useEffect(() => {
+    if (off && off !== lastOff.current) setFlash((n) => n + 1);
+    lastOff.current = off;
+  }, [off]);
   const applyCode = () => { const c = typed.trim().toUpperCase().replace(/[^A-Z0-9]/g, ""); setTyped(c); onCode(c); };
+  /** Updates a field and clears its error once it is fixed. */
+  const edit = (patch: Partial<Buyer>) => {
+    onBuyer(patch);
+    const f = Object.keys(patch)[0] as Field;
+    if (errs[f]) {
+      const next = checkoutErrors({ ...buyer, ...patch });
+      setErrs((e) => ({ ...e, [f]: next[f] }));
+    }
+  };
   const ship = buyer.delivery === "ship";
   const pickupAt = normBrand(data.brand).address;
 
   const setDelivery = (d: Delivery) => {
     // Render the address box first so it can take the focus.
-    flushSync(() => onBuyer({ delivery: d }));
+    flushSync(() => { onBuyer({ delivery: d }); if (d === "pickup") setErrs((e) => ({ ...e, address: undefined })); });
     if (d === "ship") addrRef.current?.focus();
   };
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (busy) return;
     const name = buyer.name.trim(), phone = buyer.phone.replace(/[^\d+]/g, ""), address = buyer.address.trim();
-    if (!name) { onToast(tr("Isi nama kamu dulu")); nameRef.current?.focus(); return; }
-    if (phone.replace(/\D/g, "").length < 9) { onToast(tr("Isi nomor WhatsApp yang aktif")); phoneRef.current?.focus(); return; }
-    if (ship && address.length < 10) { onToast(tr("Isi alamat lengkap untuk pengiriman")); addrRef.current?.focus(); return; }
+    const e2 = checkoutErrors(buyer);
+    setErrs(e2);
+    const first = (["name", "phone", "address"] as Field[]).find((f) => e2[f]);
+    if (first) {
+      onToast(e2[first]!);
+      const el = { name: nameRef, phone: phoneRef, address: addrRef }[first].current;
+      el?.focus({ preventScroll: true });
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    }
     onPlace({ name, phone, address: ship ? address : "" });
   };
 
@@ -109,11 +166,12 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
             <form className="form" id="checkout" data-form="checkout" onSubmit={submit}>
               <div className="grid2">
                 <div className="f"><label htmlFor="co-name">{tr("Nama")}</label>
-                  <input ref={nameRef} className="in" id="co-name" name="name" value={buyer.name} onChange={(e) => onBuyer({ name: e.target.value })}
-                    autoComplete="name" placeholder={tr("Nama kamu")} maxLength={80} /></div>
+                  <input ref={nameRef} className="in" id="co-name" name="name" value={buyer.name} onChange={(e) => edit({ name: e.target.value })}
+                    autoComplete="name" placeholder={tr("Nama kamu")} maxLength={80} {...errProps(errs, "name")} /><ErrMsg errs={errs} f="name" /></div>
                 <div className="f"><label htmlFor="co-phone">{tr("No. WhatsApp")}</label>
-                  <input ref={phoneRef} className="in" id="co-phone" name="phone" value={buyer.phone} onChange={(e) => onBuyer({ phone: e.target.value })}
-                    type="tel" inputMode="tel" autoComplete="tel" placeholder="0812 3456 7890" maxLength={20} /></div>
+                  <input ref={phoneRef} className="in" id="co-phone" name="phone" value={buyer.phone} onChange={(e) => edit({ phone: e.target.value })}
+                    type="tel" inputMode="tel" autoComplete="tel" placeholder="0812 3456 7890" maxLength={20} {...errProps(errs, "phone")} />
+                  {errs.phone ? <ErrMsg errs={errs} f="phone" /> : <span className="hint">{tr("Pesanan dan ongkir dikabari ke nomor ini.")}</span>}</div>
               </div>
               <div className="f"><span className="lbl">{tr("Pengambilan")}</span>
                 <div className="choice" role="group" aria-label={tr("Pengambilan")}>
@@ -125,8 +183,8 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
               {ship ? (
                 <div className="f" id="co-addrbox"><label htmlFor="co-addr">{tr("Alamat lengkap")}</label>
                   <textarea ref={addrRef} className="in" id="co-addr" name="address" rows={3} maxLength={500} autoComplete="street-address"
-                    placeholder={tr("Jalan, RT/RW, kelurahan, kecamatan, kota, kode pos")} value={buyer.address} onChange={(e) => onBuyer({ address: e.target.value })} />
-                  <span className="hint">{tr("Ongkir dikabari toko lewat WhatsApp.")}</span></div>
+                    placeholder={tr("Jalan, RT/RW, kelurahan, kecamatan, kota, kode pos")} value={buyer.address} onChange={(e) => edit({ address: e.target.value })} {...errProps(errs, "address")} />
+                  {errs.address ? <ErrMsg errs={errs} f="address" /> : <span className="hint">{tr("Ongkir dikabari toko lewat WhatsApp.")}</span>}</div>
               ) : (
                 <div className="pickup-box">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>
@@ -136,29 +194,45 @@ export function Cart({ data, cart, buyer, busy, onGo, onQty, onClear, onBuyer, o
               <div className="f"><label htmlFor="co-note">{tr("Catatan")} <span className="muted" style={{ fontWeight: 400 }}>{tr("(opsional)")}</span></label>
                 <input className="in" id="co-note" name="note" value={buyer.note} onChange={(e) => onBuyer({ note: e.target.value })}
                   maxLength={300} placeholder={tr("Contoh: tolong dibungkus kado")} /></div>
-              <div className="f"><label htmlFor="co-code">{tr("Kode promo")} <span className="muted" style={{ fontWeight: 400 }}>{tr("(opsional)")}</span></label>
-                <div className="promo-row">
-                  <input className="in" id="co-code" value={typed} maxLength={20} autoComplete="off" autoCapitalize="characters" placeholder={tr("Contoh: HEMAT20")}
-                    onChange={(e) => setTyped(e.target.value.toUpperCase())} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyCode(); } }} />
-                  {code && typed === code
-                    ? <button type="button" className="btn ghost" data-act="code-clear" onClick={() => { setTyped(""); onCode(""); }}>{tr("Hapus")}</button>
-                    : <button type="button" className="btn" data-act="code-apply" disabled={!typed.trim()} onClick={applyCode}>{tr("Pakai")}</button>}
+              {promoOpen ? (
+                <div className="f"><label htmlFor="co-code">{tr("Kode promo")}</label>
+                  <div className="promo-row">
+                    <input ref={codeRef} className={code && promo ? "in ok" : "in"} id="co-code" value={typed} maxLength={20} autoComplete="off" autoCapitalize="characters" placeholder={tr("Contoh: HEMAT20")}
+                      aria-describedby={code ? "co-code-msg" : undefined} aria-invalid={code && fresh && quote!.error ? true : undefined}
+                      onChange={(e) => setTyped(e.target.value.toUpperCase())} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyCode(); } }} />
+                    {code && typed === code
+                      ? <button type="button" className="btn ghost" data-act="code-clear" onClick={() => { setTyped(""); onCode(""); codeRef.current?.focus(); }}>{tr("Hapus")}</button>
+                      : <button type="button" className="btn" data-act="code-apply" disabled={!typed.trim()} onClick={applyCode}>{tr("Pakai")}</button>}
+                  </div>
+                  {code && fresh && quote!.error ? <span className="promo-msg bad" id="co-code-msg" role="alert">{quote!.errorTpl ? tr(quote!.errorTpl, quote!.errorVars) : quote!.error}</span>
+                    : code && promo ? <span className="promo-msg ok" id="co-code-msg" role="status"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>{tr("Kode {code} dipakai: hemat {rp}", { code, rp: rp(promo.amount) })}</span>
+                    : code && !fresh ? <span className="promo-msg" id="co-code-msg">{tr("Mengecek kode…")}</span> : null}
                 </div>
-                {code && fresh && quote!.error ? <span className="promo-msg bad" id="co-code-msg">{quote!.errorTpl ? tr(quote!.errorTpl, quote!.errorVars) : quote!.error}</span>
-                  : code && promo ? <span className="promo-msg ok" id="co-code-msg">{tr("Kode {code} dipakai.", { code })}</span> : null}
-              </div>
-              <div className="calc">
+              ) : (
+                <button type="button" className="link promo-open" data-act="code-open" aria-expanded={false} aria-controls="co-code"
+                  onClick={() => { flushSync(() => setPromoOpen(true)); codeRef.current?.focus(); }}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.5" /></svg>
+                  {tr("Punya kode promo?")}
+                </button>
+              )}
+              <div className="calc" ref={calcRef}>
                 <div className="ln"><span className="k">{tr("Subtotal {pcs} pcs", { pcs })}</span><span className="money">{rp(base)}</span></div>
                 {save > 0 ? <div className="ln"><span className="k">{tr("Hemat harga grosir")}</span><span className="money" style={{ color: "var(--hue)" }}>−{rp(save)}</span></div> : null}
-                {promo ? <div className="ln" id="co-promo"><span className="k">{tr("Promo {name}", { name: promo.name })}</span><span className="money" style={{ color: "var(--hue)" }}>−{rp(promo.amount)}</span></div> : null}
+                {promo ? <div className={flash ? "ln promo-ln flash" : "ln promo-ln"} key={`promo-${flash}`} id="co-promo"><span className="k">{tr("Promo {name}", { name: promo.name })}{promo.code ? <span className="code-tag">{promo.code}</span> : null}</span><span className="money">−{rp(promo.amount)}</span></div> : null}
                 <div className="ln"><span className="k">{tr("Ongkir")}</span><span>{ship ? tr("dikabari toko") : tr("tidak ada")}</span></div>
                 <div className="ln tot"><span>{tr("Total")}</span><span className="money" id="co-total">{rp(pay)}</span></div>
+                {save + off > 0 ? <div className="ln saved"><span>{tr("Kamu hemat {rp}", { rp: rp(save + off) })}</span></div> : null}
               </div>
-              <button className="btn pri lg full" type="submit" disabled={busy}>{busy ? tr("Mengirim…") : tr("Pesan lewat WhatsApp")}</button>
+              <button ref={submitRef} className="btn pri lg full" type="submit" disabled={busy}>{busy ? tr("Mengirim…") : tr("Pesan lewat WhatsApp")}</button>
               <div className="small muted">{tr("Pesananmu tercatat di {shop}, lalu WhatsApp terbuka dengan pesan yang sudah terisi. Tinggal tekan kirim.", { shop: data.shop })}</div>
             </form>
           </div>
         </aside>
+      </div>
+      {/* phones: the total and the order button stay in reach while the buyer scrolls the cart and the form */}
+      <div className={formBtnSeen ? "co-bar off" : "co-bar"} aria-hidden={formBtnSeen || undefined}>
+        <div className="co-bar-t"><span className="small">{tr("Total")}{off || save ? <span className="co-bar-save"> · {tr("hemat {rp}", { rp: rpShort(save + off) })}</span> : null}</span><b className="money" id="co-bar-total">{rp(pay)}</b></div>
+        <button type="submit" form="checkout" className="btn pri" data-act="co-bar-send" disabled={busy} tabIndex={formBtnSeen ? -1 : undefined}>{busy ? tr("Mengirim…") : tr("Pesan lewat WhatsApp")}</button>
       </div>
     </>
   );
